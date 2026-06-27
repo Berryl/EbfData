@@ -1,7 +1,8 @@
 import pytest
 
 from ebf_data.excel.excel_book_finder import find_open_book, get_named_value
-from ebf_data.excel.globals import CONSTANTS_WB_NAME, SNAPSHOT_WB
+from ebf_data.excel.globals import CONSTANTS_WB_NAME
+from ebf_data.excel.snapshot.snapshot_table import SNAPSHOT_WB
 from ebf_data.excel.cagr.cagr_table import CAGR_WB, CAGR_WKS, ACB
 
 

@@ -1,4 +1,4 @@
-from ebf_data.excel.globals import SNAPSHOT_WB
+from ebf_data.excel.snapshot.snapshot_table import SNAPSHOT_WB
 from ebf_data.excel.cagr.cagr_table import CAGR_WB
 
 
