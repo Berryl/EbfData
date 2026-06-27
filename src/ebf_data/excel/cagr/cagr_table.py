@@ -18,7 +18,7 @@ class CagrTable(xlTable):
         """
         Find trade(s) by Symbol.
         - If id_val is None → return ALL trades for that Symbol
-        - If id_val = 123 → return trades with that ID
+        - If id_val = 3 → return trades with that ID
         """
         g.ensure_str_is_valued(symbol, "symbol")
 
@@ -30,10 +30,9 @@ class CagrTable(xlTable):
             result = result[result["ID"] == id_val]
 
         if len(result) == 0:
-            if id_val is None:
-                msg = f"No trades found for symbol '{symbol}'"
-            else:
-                msg = f"No trade found for Symbol='{symbol}', ID={id_val}"
+            msg = f"No trades found for symbol '{symbol}'"
+            if id_val is not None:
+                msg = msg + f" with ID={id_val}"
             g.ensure_not_none(None, msg)
 
         return result
