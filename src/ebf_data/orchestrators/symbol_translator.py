@@ -10,6 +10,7 @@ class SymbolTranslator:
         self._cagr = cagr
 
     def to_cagr_values(self, snapshot_symbol: str) -> tuple[str, int, bool]:
+        #noinspection GrazieInspection
         """
         Convert snapshot symbol to (cagr_symbol, id_val, has_tranches)
 
