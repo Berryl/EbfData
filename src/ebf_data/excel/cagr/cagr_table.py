@@ -1,8 +1,8 @@
 import pandas as pd
+from ebf_core.guards import guards as g
 
 from ebf_data.excel.excel_book_finder import find_open_book
 from ebf_data.xlTableBase import xlTable
-from ebf_core.guards import guards as g
 
 CAGR_WB = "CAGR.xlsm"
 CAGR_WKS = "CAGR"
@@ -36,3 +36,41 @@ class CagrTable(xlTable):
             g.ensure_not_none(None, msg)
 
         return result
+
+    @staticmethod
+    def is_closed(df: pd.DataFrame) -> pd.Series:
+        """True if 'Is Closed' column == 'Y'"""
+        if df.empty:
+            return pd.Series([], dtype=bool, index=df.index)
+        return df['Is Closed'] == "Y"
+
+    @staticmethod
+    def is_open(df: pd.DataFrame) -> pd.Series:
+        """True if trade is Open (opposite of is_closed)"""
+        if df.empty:
+            return pd.Series([], dtype=bool, index=df.index)
+        return ~CagrTable.is_closed(df)
+
+    # region chainable filters
+    @staticmethod
+    def by_position(df: pd.DataFrame, position: str) -> pd.DataFrame:
+        """
+        Filter the given DataFrame to rows with the specified Position.
+        """
+        if df.empty:
+            return df
+        return df[df['Position'] == position]
+
+    def open_legs(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Return only open legs from the given DataFrame"""
+        if df.empty:
+            return df
+        return df[self.is_open(df)]
+
+    def closed_legs(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Return only closed legs from the given DataFrame"""
+        if df.empty:
+            return df
+        return df[self.is_closed(df)]
+
+    # endregion
