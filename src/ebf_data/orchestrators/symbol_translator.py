@@ -9,31 +9,34 @@ class SymbolTranslator:
 
         self._cagr = cagr
 
-    def to_cagr_values(self, snapshot_symbol: str) -> tuple[str, int]:
+    def to_cagr_values(self, snapshot_symbol: str) -> tuple[str, int, bool]:
         """
+        Convert snapshot symbol to (cagr_symbol, id_val, has_tranches)
 
-        :param snapshot_symbol:
-        :return: a tuple of (symbol, id, has_tranches)
-
-        For example, 'MARA_4.2' implies there is a 'MARA_4.1' and that there were tranches,
-        different fill times, prices, expiration dates, etc.
+        Examples:
+            "YUM"      -> ("YUM", 1, False)
+            "FCX_20"   -> ("FCX", 20, False)
+            "MARA_4.2" -> ("MARA", 4, True)
         """
         g.ensure_str_is_valued(snapshot_symbol, "snapshot_symbol")
 
-        symbol = snapshot_symbol
-        id_val = -1
-        has_tranches = False
-        if "_" in snapshot_symbol:
-            result = snapshot_symbol.split("_")
-            symbol = result[0]
-            result = result[1]
-            if "." in result:
-                result = result.split(".")
-                id_val = int(result[0])
+        if "_" not in snapshot_symbol:
+            # No suffix → use max ID from CAGR
+            symbol = snapshot_symbol
+            id_val = self._cagr.max_id_for_symbol(symbol)
+            has_tranches = False
+        else:
+            # Has suffix like "FCX_20" or "MARA_4.2"
+            symbol, suffix = snapshot_symbol.split("_", 1)
+
+            if "." in suffix:
+                # Tranches like "4.2"
+                id_part, _ = suffix.split(".", 1)
+                id_val = int(id_part)
                 has_tranches = True
             else:
-                id_val = int(result)
-        else:
+                # Simple suffix like "20"
+                id_val = int(suffix)
+                has_tranches = False
 
-            id_val = self._cagr.max_id_for_symbol(symbol)
         return symbol, id_val, has_tranches
