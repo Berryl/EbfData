@@ -1,5 +1,7 @@
 import pandas as pd
 from ebf_core.guards import guards as g
+from ebf_core.guards.guards import ContractError
+from ebf_trading.domain.entities.transaction_events.transaction_event_type import TransactionEventType
 
 from ebf_data.excel.cagr.cagr_table import CagrTable
 from ebf_data.excel.snapshot.snapshot_table import SnapshotTable
@@ -34,25 +36,35 @@ class OpexProcessor:
                 print(f"Warning: No open SC for {symbol}")
                 continue
 
-            if not has_tranches:
-                # Simple case - use the ID directly
-                match = candidates[candidates["ID"] == id_val]
-            else:
-                # Complex case - match by expiration, strike, premium
-                match = self._find_best_match(candidates, row)
-
-            if match.empty:
-                print(f"Warning: Could not find match for {snapshot_symbol}")
+            try:
+                if not has_tranches:
+                    # Simple case - use the ID directly
+                    match = candidates[candidates["ID"] == id_val]
+                    g.ensure_true(not match.empty, f"No open SC leg found with ID={id_val}")
+                else:
+                    # Complex case - match by expiration, strike, premium
+                    match = self.find_match(candidates, row)
+            except ContractError as e:
+                print(f"Warning: Could not find match for {snapshot_symbol} - {e}")
                 continue
 
-            self._close_trade_in_cagr(match, row)
+            self._close_trade_in_cagr(match, row, TransactionEventType.EXPIRATION)
 
         print("Finished closing expired short calls.")
 
-    def _find_best_match(self, candidates: pd.DataFrame, snapshot_row: pd.Series) -> pd.DataFrame:
-        """Match using priority: Expiration → Strike → Premium"""
-        if candidates.empty:
-            return candidates
+    def find_match(self, candidates: pd.DataFrame, snapshot_row: pd.Series) -> pd.DataFrame:
+        """
+        Find the exact open SC leg this snapshot row corresponds to.
+
+        Narrows by Expiration Date -> Strike Price -> Premium (only as a
+        tiebreaker between tranches at the same Exp Date/Strike). This is
+        not a fuzzy/best-effort match: a match is always expected to exist.
+        Failing to find one is an error, not a normal outcome.
+
+        Raises:
+            ContractError: if no candidate survives any narrowing stage.
+        """
+        g.ensure_true(not candidates.empty, "find_match received no candidates to match against")
 
         exp_date = snapshot_row['SC Exp Date']
         strike = snapshot_row['SC Strike Price']
@@ -60,24 +72,26 @@ class OpexProcessor:
 
         # 1. Expiration Date
         candidates = candidates[candidates['Exp Date'] == exp_date].copy()
-        if candidates.empty:
-            return candidates
+        g.ensure_true(not candidates.empty, f"No open SC leg found with Exp Date={exp_date!r}")
 
         # 2. Strike Price
         candidates = candidates[candidates['Strike Price'] == strike].copy()
-        if candidates.empty or len(candidates) == 1:
+        g.ensure_true(not candidates.empty, f"No open SC leg found with Strike Price={strike!r}")
+        if len(candidates) == 1:
             return candidates
 
-        # 3. Premium
+        # 3. Premium - tiebreaker only, used when multiple tranches share
+        # the same Exp Date and Strike Price.
         candidates = candidates.copy()
         candidates['parsed_premium'] = candidates['Entry Trade'].apply(self._parse_premium)
         candidates['premium_diff'] = (candidates['parsed_premium'] - snapshot_premium).abs()
 
         best_idx = candidates['premium_diff'].idxmin()
-        return candidates.loc[[best_idx]] if best_idx is not None else pd.DataFrame()
+        return candidates.loc[[best_idx]]
 
-    def _close_trade_in_cagr(self, match, row):
-        pass
+    def _close_trade_in_cagr(self, match: pd.DataFrame, row: pd.Series, event: TransactionEventType) -> None:
+        underlying_price = row['Last Price']
+        self._cagr.close_trade_leg(match, event, underlying_price)
 
     @staticmethod
     def _parse_premium(entry_trade: str) -> float:
