@@ -112,7 +112,7 @@ class TestCloseTrade:
         cagr = make_cagr_table(sample_df())
         matched = current_df(cagr).loc[[11]]  # the $18.00 strike leg, specifically
 
-        cagr.close_trade(matched, TransactionEventType.EXPIRATION, underlying_price=15.30)
+        cagr.close_trade_leg(matched, TransactionEventType.EXPIRATION, underlying_price=15.30)
 
         assert current_df(cagr).loc[11, "Is Closed"] == "Y"
         assert current_df(cagr).loc[11, "Exit Trigger"] == "OPEX"
@@ -127,7 +127,7 @@ class TestCloseTrade:
         cagr = make_cagr_table(sample_df())
         matched = current_df(cagr).loc[[12]]
 
-        cagr.close_trade(matched, TransactionEventType.ASSIGNMENT, underlying_price=5.45)
+        cagr.close_trade_leg(matched, TransactionEventType.ASSIGNMENT, underlying_price=5.45)
 
         assert current_df(cagr).loc[12, "Exit Trade"] == "Assignment"
 
@@ -135,7 +135,7 @@ class TestCloseTrade:
         cagr = make_cagr_table(sample_df())
         matched = current_df(cagr).loc[[12]]
 
-        cagr.close_trade(matched, TransactionEventType.EXERCISE, underlying_price=5.45)
+        cagr.close_trade_leg(matched, TransactionEventType.EXERCISE, underlying_price=5.45)
 
         assert current_df(cagr).loc[12, "Exit Trade"] == "Exercise"
 
@@ -145,7 +145,7 @@ class TestCloseTrade:
         cagr = make_cagr_table(sample_df())
         matched = current_df(cagr).loc[[10]]
 
-        cagr.close_trade(matched, TransactionEventType.EXPIRATION, underlying_price=15.30)
+        cagr.close_trade_leg(matched, TransactionEventType.EXPIRATION, underlying_price=15.30)
 
         pushed_df = cagr.table.update.call_args[0][0]
         assert "Exit Fill Time" not in pushed_df.columns or pushed_df.loc[10, "Exit Fill Time"] != "OPEX"
@@ -156,7 +156,7 @@ class TestCloseTrade:
 
         msg = r"closing trade row must contain exactly one row, got 0"
         with pytest.raises(ContractError, match=msg):
-            cagr.close_trade(empty, TransactionEventType.EXPIRATION, underlying_price=15.30)
+            cagr.close_trade_leg(empty, TransactionEventType.EXPIRATION, underlying_price=15.30)
 
     def test_raises_on_multiple_rows_passed(self):
         """close_trade refuses to guess if the caller hands it more than
@@ -166,4 +166,4 @@ class TestCloseTrade:
 
         msg = r"closing trade row must contain exactly one row, got 2"
         with pytest.raises(ContractError, match=msg):
-            cagr.close_trade(both_uuuu, TransactionEventType.EXPIRATION, underlying_price=15.30)
+            cagr.close_trade_leg(both_uuuu, TransactionEventType.EXPIRATION, underlying_price=15.30)

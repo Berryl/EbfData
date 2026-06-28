@@ -44,7 +44,7 @@ class CagrTable(xlTable):
         self._ensure_symbol_exists(symbol_trades, symbol)
         return int(symbol_trades["ID"].max())
 
-    def close_trade(self, row: pd.DataFrame, event: TransactionEventType, underlying_price: float) -> None:
+    def close_trade_leg(self, row: pd.DataFrame, event: TransactionEventType, underlying_price: float) -> None:
         """
         Close out a single open trade leg in CAGR.
 
