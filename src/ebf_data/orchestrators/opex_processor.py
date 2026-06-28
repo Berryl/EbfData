@@ -24,7 +24,7 @@ class OpexProcessor:
             print("No expired short calls to close.")
             return
 
-        for _, row in to_close.iterrows():
+        for snapshot_index, row in to_close.iterrows():
             snapshot_symbol = row['Symbol']
             symbol, id_val, has_tranches = self._symbol_translator.to_cagr_values(snapshot_symbol)
 
@@ -49,6 +49,7 @@ class OpexProcessor:
                 continue
 
             self._close_trade_in_cagr(match, row, TransactionEventType.EXPIRATION)
+            self._snapshot.clear_short_call_columns(snapshot_index)
 
         print("Finished closing expired short calls.")
 
@@ -80,8 +81,7 @@ class OpexProcessor:
         if len(candidates) == 1:
             return candidates
 
-        # 3. Premium - tiebreaker only, used when multiple tranches share
-        # the same Exp Date and Strike Price.
+        # 3. Premium - tiebreaker only used when multiple tranches share the same Exp Date and Strike Price.
         candidates = candidates.copy()
         candidates['parsed_premium'] = candidates['Entry Trade'].apply(self._parse_premium)
         candidates['premium_diff'] = (candidates['parsed_premium'] - snapshot_premium).abs()

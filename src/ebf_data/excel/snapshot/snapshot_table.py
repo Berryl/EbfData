@@ -9,6 +9,20 @@ SNAPSHOT_WKS = "SNAP"
 SNAPSHOT_TABLE = "SnapshotTable"
 
 
+CLEARED_SHORT_CALL_COLUMNS = [
+    "SC Exp Date",
+    "SC Strike Price",
+    "SC Qty",
+    "SC Book Date",
+    "SC Fill Date",
+    "SC Book Price",
+    "SC Fill Delta",
+    "SC Current Ask",
+    "SC Current Delta",
+    "SC Buy Back Cutoff",
+]
+
+
 class SnapshotTable(xlTable):
     def __init__(self) -> None:
         super().__init__(find_open_book(SNAPSHOT_WB), SNAPSHOT_WKS, SNAPSHOT_TABLE)
@@ -21,8 +35,15 @@ class SnapshotTable(xlTable):
         """Return all assigned short calls. Returns an empty DataFrame if none."""
         return self._get_expired_short_calls(TransactionEventType.ASSIGNMENT)
 
+    def clear_short_call_columns(self, index_label) -> None:
+        """
+        Clear short-call-specific columns for one row, after its
+        matching CAGR leg has been closed out.
+        """
+        self.update_row(index_label, {col: None for col in CLEARED_SHORT_CALL_COLUMNS})
+
+    # region helpers
     def _get_expired_short_calls(self, event: TransactionEventType) -> pd.DataFrame:
-        """Internal helper for expired vs assigned short calls."""
         df = self.df
 
         conditions = {
@@ -35,3 +56,4 @@ class SnapshotTable(xlTable):
             ]
 
         return expired
+    # endregion
