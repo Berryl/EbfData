@@ -48,8 +48,7 @@ class CagrTable(xlTable):
         """
         Close out a single open trade leg in CAGR.
 
-        Does not set 'Exit Fill Time' - that depends on EbfTrading's
-        OpexCalendar, which isn't wired in yet.
+        TODO: wire 'Exit Fill Time' using EbfTrading's OpexCalendar
         """
         g.ensure_true(len(row) == 1, f"closing trade row must contain exactly one row, got {len(row)}")
 

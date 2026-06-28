@@ -1,3 +1,4 @@
+from typing import cast
 from unittest.mock import MagicMock
 
 import pandas as pd
@@ -21,6 +22,20 @@ def make_cagr_table(df: pd.DataFrame) -> CagrTable:
     cagr.name = "CagrTable"
     cagr._df = df
     return cagr
+
+
+def current_df(cagr: CagrTable) -> pd.DataFrame:
+    """
+    Narrowing accessor for cagr._df in tests.
+
+    cagr._df is statically typed as pd.DataFrame | None (set in
+    xlTable.__init__), so the analyzer can't know it's always a real
+    DataFrame here just because make_cagr_table() assigned one. We know
+    it by construction in every test in this file, so this cast centralizes
+    that assumption in one place instead of silencing the warning at every
+    .loc/.iloc call site.
+    """
+    return cast(pd.DataFrame, cagr._df)
 
 
 def sample_df() -> pd.DataFrame:
@@ -49,11 +64,11 @@ class TestUpdateRow:
 
         cagr.update_row(11, {"Is Closed": "Y", "Exit Trigger": "OPEX"})
 
-        assert cagr._df.loc[11, "Is Closed"] == "Y"
-        assert cagr._df.loc[11, "Exit Trigger"] == "OPEX"
+        assert current_df(cagr).loc[11, "Is Closed"] == "Y"
+        assert current_df(cagr).loc[11, "Exit Trigger"] == "OPEX"
         # sibling rows with the same Symbol/ID must be untouched
-        assert cagr._df.loc[10, "Is Closed"] == ""
-        assert cagr._df.loc[12, "Is Closed"] == ""
+        assert current_df(cagr).loc[10, "Is Closed"] == ""
+        assert current_df(cagr).loc[12, "Is Closed"] == ""
 
     def test_pushes_full_table_back_through_excel(self):
         cagr = make_cagr_table(sample_df())
@@ -95,40 +110,40 @@ class TestCloseTrade:
         write to that exact row and leave the other untouched.
         """
         cagr = make_cagr_table(sample_df())
-        matched = cagr._df.loc[[11]]  # the $18.00 strike leg, specifically
+        matched = current_df(cagr).loc[[11]]  # the $18.00 strike leg, specifically
 
         cagr.close_trade(matched, TransactionEventType.EXPIRATION, underlying_price=15.30)
 
-        assert cagr._df.loc[11, "Is Closed"] == "Y"
-        assert cagr._df.loc[11, "Exit Trigger"] == "OPEX"
-        assert cagr._df.loc[11, "Exit Trade"] == "Expiration"
-        assert cagr._df.loc[11, "Exit Und Price"] == 15.30
+        assert current_df(cagr).loc[11, "Is Closed"] == "Y"
+        assert current_df(cagr).loc[11, "Exit Trigger"] == "OPEX"
+        assert current_df(cagr).loc[11, "Exit Trade"] == "Expiration"
+        assert current_df(cagr).loc[11, "Exit Und Price"] == 15.30
 
         # the other open leg for the same Symbol/ID must remain untouched
-        assert cagr._df.loc[10, "Is Closed"] == ""
-        assert cagr._df.loc[10, "Exit Trade"] == ""
+        assert current_df(cagr).loc[10, "Is Closed"] == ""
+        assert current_df(cagr).loc[10, "Exit Trade"] == ""
 
     def test_writes_assignment_event_value(self):
         cagr = make_cagr_table(sample_df())
-        matched = cagr._df.loc[[12]]
+        matched = current_df(cagr).loc[[12]]
 
         cagr.close_trade(matched, TransactionEventType.ASSIGNMENT, underlying_price=5.45)
 
-        assert cagr._df.loc[12, "Exit Trade"] == "Assignment"
+        assert current_df(cagr).loc[12, "Exit Trade"] == "Assignment"
 
     def test_writes_exercise_event_value(self):
         cagr = make_cagr_table(sample_df())
-        matched = cagr._df.loc[[12]]
+        matched = current_df(cagr).loc[[12]]
 
         cagr.close_trade(matched, TransactionEventType.EXERCISE, underlying_price=5.45)
 
-        assert cagr._df.loc[12, "Exit Trade"] == "Exercise"
+        assert current_df(cagr).loc[12, "Exit Trade"] == "Exercise"
 
     def test_does_not_set_exit_fill_time(self):
         """Exit Fill Time depends on OpexCalendar, not wired in yet - confirm
         close_trade doesn't invent a placeholder value for it."""
         cagr = make_cagr_table(sample_df())
-        matched = cagr._df.loc[[10]]
+        matched = current_df(cagr).loc[[10]]
 
         cagr.close_trade(matched, TransactionEventType.EXPIRATION, underlying_price=15.30)
 
@@ -137,7 +152,7 @@ class TestCloseTrade:
 
     def test_raises_on_empty_match(self):
         cagr = make_cagr_table(sample_df())
-        empty = cagr._df.iloc[0:0]
+        empty = current_df(cagr).iloc[0:0]
 
         msg = r"closing trade row must contain exactly one row, got 0"
         with pytest.raises(ContractError, match=msg):
@@ -147,7 +162,7 @@ class TestCloseTrade:
         """close_trade refuses to guess if the caller hands it more than
         one candidate - disambiguation is the caller's job, not ours."""
         cagr = make_cagr_table(sample_df())
-        both_uuuu = cagr._df.loc[[10, 11]]
+        both_uuuu = current_df(cagr).loc[[10, 11]]
 
         msg = r"closing trade row must contain exactly one row, got 2"
         with pytest.raises(ContractError, match=msg):

@@ -16,7 +16,9 @@ class xlTable:
     def df(self) -> pd.DataFrame:
         """Full table as DataFrame"""
         if self._df is None:
-            self._df = self.table.range.options(pd.DataFrame, header=1, index=False, chunksize=5000).value
+            loaded = self.table.range.options(pd.DataFrame, header=1, index=False, chunksize=5000).value
+            self._df = loaded
+        assert self._df is not None
         return self._df
 
     def refresh(self) -> pd.DataFrame:
