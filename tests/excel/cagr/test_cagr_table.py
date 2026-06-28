@@ -72,3 +72,7 @@ class TestCagrReader:
             results = sut.closed_legs(results)
 
             assert len(results) == 8
+
+        def test_chaining_filters(self, uuuu2: pd.DataFrame, sut: CagrTable):
+            results = sut.by_position(uuuu2, "SC").pipe(sut.where_closed)
+            assert len(results) == 8

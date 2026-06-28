@@ -76,3 +76,13 @@ class CagrTable(xlTable):
         return df[self.is_closed(df)]
 
     # endregion
+
+    # region chaining (with pipe)
+    def where_closed(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Return only closed legs (convenience alias for closed_legs)"""
+        return self.closed_legs(df)
+
+    def where_open(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Return only open legs (convenience alias for open_legs)"""
+        return self.open_legs(df)
+    # endregion
