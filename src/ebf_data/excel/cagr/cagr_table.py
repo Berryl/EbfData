@@ -58,6 +58,7 @@ class CagrTable(xlTable):
             "Is Closed": "Y",
             "Exit Trigger": "OPEX",
             "Exit Und Price": underlying_price,
+            "Exit Fill Time": "06/26/2026  04:00:00 PM",
             "Exit Trade": event.value.capitalize(),
         })
 
