@@ -67,10 +67,8 @@ class TestCagrReader:
         def test_open_legs(self, uuuu2: pd.DataFrame, sut: CagrTable):
             assert len(sut.open_legs(uuuu2)) == 0
 
-        def test_is_closed_with_by_position(self, uuuu2: pd.DataFrame, sut: CagrTable):
-            sc_trades = sut.by_position(uuuu2, "SC")
+        def test_multiple_filters(self, uuuu2: pd.DataFrame, sut: CagrTable):
+            results = sut.by_position(uuuu2, "SC")
+            results = sut.closed_legs(results)
 
-            closed_sc_mask = sut.is_closed(sc_trades)
-
-            assert len(closed_sc_mask) == len(sc_trades)
-            assert closed_sc_mask.all(), "All SC trades in this campaign should be closed"
+            assert len(results) == 8
