@@ -2,7 +2,7 @@ import pandas as pd
 from ebf_core.guards import guards as g
 
 from ebf_data.excel.excel_book_finder import find_open_book
-from ebf_data.xlTableBase import xlTable
+from ebf_data.excel.xlTableBase import xlTable
 
 CAGR_WB = "CAGR.xlsm"
 CAGR_WKS = "CAGR"

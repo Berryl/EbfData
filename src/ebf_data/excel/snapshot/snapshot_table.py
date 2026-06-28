@@ -2,7 +2,7 @@ import pandas as pd
 from ebf_trading.domain.entities.transaction_events.transaction_event_type import TransactionEventType
 
 from ebf_data.excel.excel_book_finder import find_open_book
-from ebf_data.xlTableBase import xlTable
+from ebf_data.excel.xlTableBase import xlTable
 
 SNAPSHOT_WB = "snapshot.xlsm"
 SNAPSHOT_WKS = "SNAP"
