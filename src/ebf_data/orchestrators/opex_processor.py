@@ -69,6 +69,7 @@ class OpexProcessor:
             return candidates
 
         # 3. Premium
+        candidates = candidates.copy()
         candidates['parsed_premium'] = candidates['Entry Trade'].apply(self._parse_premium)
         candidates['premium_diff'] = (candidates['parsed_premium'] - snapshot_premium).abs()
 
