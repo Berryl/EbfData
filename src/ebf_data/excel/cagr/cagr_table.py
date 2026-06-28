@@ -27,6 +27,7 @@ class CagrTable(xlTable):
         result = df[df["Symbol"] == symbol]
 
         if id_val is not None:
+            g.ensure_positive_number(id_val, description="id_val")
             result = result[result["ID"] == id_val]
 
         self._ensure_symbol_exists(result, symbol, id_val)
@@ -40,12 +41,10 @@ class CagrTable(xlTable):
         symbol_trades = df[df["Symbol"] == symbol]
 
         self._ensure_symbol_exists(symbol_trades, symbol)
-
         return int(symbol_trades["ID"].max())
 
     @staticmethod
-    def _ensure_symbol_exists(self, df: pd.DataFrame, symbol: str, id_val: int | None = None):
-        """Raise error if no trades found for the symbol (and optional ID)"""
+    def _ensure_symbol_exists(df: pd.DataFrame, symbol: str, id_val: int | None = None):
         if len(df) == 0:
             msg = f"No trades found for symbol '{symbol}'"
             if id_val is not None:

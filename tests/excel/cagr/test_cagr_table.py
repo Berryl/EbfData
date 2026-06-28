@@ -1,5 +1,8 @@
+import re
+
 import pandas as pd
 import pytest
+from ebf_core.guards.guards import ContractError
 
 from ebf_data.excel.cagr.cagr_table import CagrTable
 
@@ -44,6 +47,22 @@ class TestCagrReader:
             assert count["SP"] == 2
             assert count["SC"] == 8
 
+        @pytest.mark.parametrize("symbol", ["  "])
+        def test_symbol_must_be_valued(self, symbol: str, sut: CagrTable):
+            msg = re.escape("Arg 'symbol' cannot be an empty string")
+            with pytest.raises(ContractError, match=msg):
+                sut.get_trade(symbol, 1)
+
+        def test_symbol_must_exist(self, sut: CagrTable):
+            msg = re.escape("No trades found for symbol '---' with ID=1")
+            with pytest.raises(ContractError, match=msg):
+                sut.get_trade("---", 1)
+
+        def test_id_must_positive_if_not_none(self, sut: CagrTable):
+            msg = re.escape("Arg 'id_val' must be positive")
+            with pytest.raises(ContractError, match=msg):
+                sut.get_trade("UUUU", 0)
+
         class TestQueries:
 
             @pytest.mark.parametrize("position, expected_count", [("LC", 1), ("LNG", 1), ("SC", 8), ("SP", 2)])
@@ -78,3 +97,9 @@ class TestCagrReader:
             def test_chaining_filters(self, uuuu2: pd.DataFrame, sut: CagrTable):
                 results = sut.by_position(uuuu2, "SC").pipe(sut.where_closed)
                 assert len(results) == 8
+
+    class TestMaxId:
+
+        @pytest.mark.parametrize("symbol, expected", [("UUUU", 3), ("AMZN", 25), ("FCX", 20), ])
+        def test_max_id_for_symbol_parametrized(self, sut: CagrTable, symbol: str, expected: int):
+            assert sut.max_id_for_symbol(symbol) >= expected
