@@ -7,7 +7,7 @@ from ebf_core.guards.guards import ContractError
 from ebf_data.excel.cagr.cagr_table import CagrTable
 
 
-class TestCagrReader:
+class TestCagrTable:
     @pytest.fixture
     def sut(self) -> CagrTable:
         return CagrTable()

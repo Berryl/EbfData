@@ -1,5 +1,6 @@
 import pandas as pd
 from ebf_core.guards import guards as g
+from ebf_trading.domain.entities.transaction_events.transaction_event_type import TransactionEventType
 
 from ebf_data.excel.excel_book_finder import find_open_book
 from ebf_data.excel.xlTableBase import xlTable
@@ -43,6 +44,24 @@ class CagrTable(xlTable):
         self._ensure_symbol_exists(symbol_trades, symbol)
         return int(symbol_trades["ID"].max())
 
+    def close_trade(self, row: pd.DataFrame, event: TransactionEventType, underlying_price: float) -> None:
+        """
+        Close out a single open trade leg in CAGR.
+
+        Does not set 'Exit Fill Time' - that depends on EbfTrading's
+        OpexCalendar, which isn't wired in yet.
+        """
+        g.ensure_true(len(row) == 1, f"closing trade row must contain exactly one row, got {len(row)}")
+
+        index_label = row.index[0]
+
+        self.update_row(index_label, {
+            "Is Closed": "Y",
+            "Exit Trigger": "OPEX",
+            "Exit Und Price": underlying_price,
+            "Exit Trade": event.value.capitalize(),
+        })
+
     @staticmethod
     def _ensure_symbol_exists(df: pd.DataFrame, symbol: str, id_val: int | None = None):
         if len(df) == 0:
@@ -65,6 +84,7 @@ class CagrTable(xlTable):
         if df.empty:
             return pd.Series([], dtype=bool, index=df.index)
         return ~CagrTable.is_closed(df)
+
     # endregion
 
     # region filters

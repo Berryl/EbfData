@@ -47,6 +47,40 @@ class xlTable:
         self.table.update(df_new, index=index)
         self._df = df_new.copy()
 
+    def update_row(self, index_label, values: dict) -> None:
+        """
+        Update specific columns for a single row, identified by its DataFrame
+        index label (not its positional row number).
+
+        Use this instead of update_slice when the row to update was found by
+        filtering/matching logic and may not be at a known or contiguous
+        position - e.g., closing one specific matched trade out of several
+        open candidates.
+
+        Args:
+            index_label: the .index value of the row to update (as returned
+                by a filtered/matched DataFrame's .index).
+            values: mapping of column name -> new value for that row.
+
+        Raises:
+            KeyError: if index_label is not present in the table, or if a
+                column in `values` does not exist in the table.
+        """
+        full_df = self.df.copy()
+
+        if index_label not in full_df.index:
+            raise KeyError(f"Row index {index_label!r} not found in table '{self.name}'")
+
+        missing_columns = [c for c in values if c not in full_df.columns]
+        if missing_columns:
+            raise KeyError(f"Columns not found in table '{self.name}': {missing_columns}")
+
+        for column, value in values.items():
+            full_df.loc[index_label, column] = value
+
+        self.table.update(full_df, index=False)
+        self._df = full_df
+
     def update_slice(self,
                      df_slice: pd.DataFrame,
                      start_row: int = 0,
