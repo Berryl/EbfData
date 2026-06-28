@@ -20,11 +20,20 @@ class TestSymbolTranslator:
 
                 assert symbol == "YUM" and id_val == 1 and not has_tranches
 
-        class TestWhenSymbolHasSuffixWithoutTranche:
-            def test_trade_id_is_max_id_found(self, sut: SymbolTranslator) -> None:
+        class TestWhenSymbolHasSuffixWithoutTranches:
+            def test_trade_id_is_as_expected(self, sut: SymbolTranslator) -> None:
                 result = sut.to_cagr_values("FCX_20")
                 symbol = result[0]
                 id_val = result[1]
                 has_tranches = result[2]
 
                 assert symbol == "FCX" and id_val == 20 and not has_tranches
+
+        class TestWhenSymbolHasSuffixAndTranches:
+            def test_trade_id_is_as_expected(self, sut: SymbolTranslator) -> None:
+                result = sut.to_cagr_values("MARA_4.2")
+                symbol = result[0]
+                id_val = result[1]
+                has_tranches = result[2]
+
+                assert symbol == "MARA" and id_val == 4 and has_tranches

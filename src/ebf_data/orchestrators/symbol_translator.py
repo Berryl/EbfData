@@ -15,7 +15,7 @@ class SymbolTranslator:
         :param snapshot_symbol:
         :return: a tuple of (symbol, id, has_tranches)
 
-        For example, 'MARA_14.2' implies there is a 'MARA_14.1' and that there were tranches,
+        For example, 'MARA_4.2' implies there is a 'MARA_4.1' and that there were tranches,
         different fill times, prices, expiration dates, etc.
         """
         g.ensure_str_is_valued(snapshot_symbol, "snapshot_symbol")
