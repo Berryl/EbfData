@@ -22,7 +22,7 @@ class TestCagrReader:
             assert "Is Closed" in headers
             assert "GUID Lookup" in headers
 
-    class TestQueries:
+    class TestGetTrade:
 
         @pytest.fixture
         def uuuu2(self, sut: CagrTable) -> pd.DataFrame:
@@ -44,35 +44,37 @@ class TestCagrReader:
             assert count["SP"] == 2
             assert count["SC"] == 8
 
-        @pytest.mark.parametrize("position, expected_count", [("LC", 1), ("LNG", 1), ("SC", 8), ("SP", 2)])
-        def test_by_position(self, uuuu2: pd.DataFrame, sut: CagrTable, position: str, expected_count: int):
-            results = sut.by_position(uuuu2, position)
-            assert len(results) == expected_count
+        class TestQueries:
 
-        def test_is_closed_mask(self, uuuu2: pd.DataFrame, sut: CagrTable):
-            mask = sut.is_closed(uuuu2)
+            @pytest.mark.parametrize("position, expected_count", [("LC", 1), ("LNG", 1), ("SC", 8), ("SP", 2)])
+            def test_by_position(self, uuuu2: pd.DataFrame, sut: CagrTable, position: str, expected_count: int):
+                results = sut.by_position(uuuu2, position)
+                assert len(results) == expected_count
 
-            assert len(mask) == len(uuuu2)
-            assert mask.all(), "All legs in this campaign are closed"
+            def test_is_closed_mask(self, uuuu2: pd.DataFrame, sut: CagrTable):
+                mask = sut.is_closed(uuuu2)
 
-        def test_is_open_mask(self, uuuu2: pd.DataFrame, sut: CagrTable):
-            mask = sut.is_open(uuuu2)
+                assert len(mask) == len(uuuu2)
+                assert mask.all(), "All legs in this campaign are closed"
 
-            assert len(mask) == len(uuuu2)
-            assert not mask.any(), "No trades should be open in this closed campaign"
+            def test_is_open_mask(self, uuuu2: pd.DataFrame, sut: CagrTable):
+                mask = sut.is_open(uuuu2)
 
-        def test_closed_legs(self, uuuu2: pd.DataFrame, sut: CagrTable):
-            assert len(sut.closed_legs(uuuu2)) == 12
+                assert len(mask) == len(uuuu2)
+                assert not mask.any(), "No trades should be open in this closed campaign"
 
-        def test_open_legs(self, uuuu2: pd.DataFrame, sut: CagrTable):
-            assert len(sut.open_legs(uuuu2)) == 0
+            def test_closed_legs(self, uuuu2: pd.DataFrame, sut: CagrTable):
+                assert len(sut.closed_legs(uuuu2)) == 12
 
-        def test_multiple_filters(self, uuuu2: pd.DataFrame, sut: CagrTable):
-            results = sut.by_position(uuuu2, "SC")
-            results = sut.closed_legs(results)
+            def test_open_legs(self, uuuu2: pd.DataFrame, sut: CagrTable):
+                assert len(sut.open_legs(uuuu2)) == 0
 
-            assert len(results) == 8
+            def test_multiple_filters(self, uuuu2: pd.DataFrame, sut: CagrTable):
+                results = sut.by_position(uuuu2, "SC")
+                results = sut.closed_legs(results)
 
-        def test_chaining_filters(self, uuuu2: pd.DataFrame, sut: CagrTable):
-            results = sut.by_position(uuuu2, "SC").pipe(sut.where_closed)
-            assert len(results) == 8
+                assert len(results) == 8
+
+            def test_chaining_filters(self, uuuu2: pd.DataFrame, sut: CagrTable):
+                results = sut.by_position(uuuu2, "SC").pipe(sut.where_closed)
+                assert len(results) == 8

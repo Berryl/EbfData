@@ -29,13 +29,28 @@ class CagrTable(xlTable):
         if id_val is not None:
             result = result[result["ID"] == id_val]
 
-        if len(result) == 0:
+        self._ensure_symbol_exists(result, symbol, id_val)
+        return result
+
+    def max_id_for_symbol(self, symbol: str) -> int:
+        """Return the highest trade ID for the passed Symbol."""
+        g.ensure_str_is_valued(symbol, "symbol")
+
+        df = self.df
+        symbol_trades = df[df["Symbol"] == symbol]
+
+        self._ensure_symbol_exists(symbol_trades, symbol)
+
+        return int(symbol_trades["ID"].max())
+
+    @staticmethod
+    def _ensure_symbol_exists(self, df: pd.DataFrame, symbol: str, id_val: int | None = None):
+        """Raise error if no trades found for the symbol (and optional ID)"""
+        if len(df) == 0:
             msg = f"No trades found for symbol '{symbol}'"
             if id_val is not None:
-                msg = msg + f" with ID={id_val}"
+                msg += f" with ID={id_val}"
             g.ensure_not_none(None, msg)
-
-        return result
 
     # region masks
     @staticmethod
