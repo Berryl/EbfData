@@ -37,6 +37,7 @@ class CagrTable(xlTable):
 
         return result
 
+    # region masks
     @staticmethod
     def is_closed(df: pd.DataFrame) -> pd.Series:
         """True if 'Is Closed' column == 'Y'"""
@@ -50,8 +51,9 @@ class CagrTable(xlTable):
         if df.empty:
             return pd.Series([], dtype=bool, index=df.index)
         return ~CagrTable.is_closed(df)
+    # endregion
 
-    # region chainable filters
+    # region filters
     @staticmethod
     def by_position(df: pd.DataFrame, position: str) -> pd.DataFrame:
         """
