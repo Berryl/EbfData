@@ -1,6 +1,6 @@
 import pytest
 
-from ebf_data.orchestrators.opex_processor import OpexProcessor
+from ebf_data.excel.orchestrators.opex_processor import OpexProcessor
 
 
 class TestParsePremium:

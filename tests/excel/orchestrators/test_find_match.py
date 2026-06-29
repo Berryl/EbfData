@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 from ebf_core.guards.guards import ContractError
 
-from ebf_data.orchestrators.opex_processor import OpexProcessor
+from ebf_data.excel.orchestrators.opex_processor import OpexProcessor
 
 
 def make_opex_processor() -> OpexProcessor:

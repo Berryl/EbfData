@@ -1,7 +1,7 @@
 import pytest
 
 from ebf_data.excel.cagr.cagr_table import CagrTable
-from ebf_data.orchestrators.symbol_translator import SymbolTranslator
+from ebf_data.excel.orchestrators.symbol_translator import SymbolTranslator
 
 
 class TestSymbolTranslator:

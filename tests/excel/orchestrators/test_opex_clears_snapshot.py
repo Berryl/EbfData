@@ -1,10 +1,9 @@
 from unittest.mock import MagicMock
 
 import pandas as pd
-from ebf_trading.domain.entities.transaction_events.transaction_event_type import TransactionEventType
 
-from ebf_data.orchestrators.opex_processor import OpexProcessor
-from ebf_data.orchestrators.symbol_translator import SymbolTranslator
+from ebf_data.excel.orchestrators.opex_processor import OpexProcessor
+from ebf_data.excel.orchestrators.symbol_translator import SymbolTranslator
 
 
 def make_open_sc_candidate(id_val: int) -> pd.DataFrame:

@@ -5,7 +5,7 @@ from ebf_trading.domain.entities.transaction_events.transaction_event_type impor
 
 from ebf_data.excel.cagr.cagr_table import CagrTable
 from ebf_data.excel.snapshot.snapshot_table import SnapshotTable
-from ebf_data.orchestrators.symbol_translator import SymbolTranslator
+from ebf_data.excel.orchestrators.symbol_translator import SymbolTranslator
 
 
 class OpexProcessor:
