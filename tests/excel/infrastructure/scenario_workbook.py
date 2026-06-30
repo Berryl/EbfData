@@ -1,5 +1,5 @@
 """
-Open/close infrastructure for TEST WORKBOOKS ONLY.
+Open/close infrastructure for DISPOSABLE TEST WORKBOOKS ONLY.
 
 This module exists for one purpose: letting test fixtures open and close
 scenario workbooks freely - files that exist solely for testing and have
@@ -17,36 +17,45 @@ trader is actively relying on right now, use find_open_book. If it's a
 file that exists only so a test suite has something to open and throw
 away, use this module.
 
-Why this resolves the path explicitly (norm_path) instead of just calling
-xw.Book(str(path)): xw.Book's own matching against already-open instances
-is sensitive to exactly how the path string is spelled - relative vs
-absolute, case, separators, whether it's resolved against the current
-working directory at all. A bare, unresolved string can fail to match an
-already-open book (causing a spurious second open) or fail to find one to
-close. Resolving to one canonical absolute path before ANY xlwings call
-removes that ambiguity entirely.
+Why this resolves the path via ProjectFileLocator instead of just calling
+xw.Book(str(path)) or resolving against Path.cwd(): xw.Book's own matching
+against already-open instances is sensitive to exactly how the path string
+is spelled - relative vs absolute, case, separators, and critically, what
+the current working directory happens to be when the test process starts.
+A path resolved against cwd() works fine until the test is launched from a
+different working directory (a different IDE config, CI, a teammate
+running from a subfolder) and then silently breaks. Anchoring against the
+PROJECT ROOT (auto-detected via ProjectFileLocator's marker search, e.g.
+.git/pyproject.toml) instead of cwd() makes resolution consistent
+regardless of where the process was launched from.
 """
 from pathlib import Path
 
 import xlwings as xw
-from ebf_core.fileutil.path_norm import norm_path
+from ebf_core.fileutil.project_file_locator import ProjectFileLocator
 
 
 def _resolved(path: str | Path) -> Path:
-    resolved = norm_path(path, base=Path.cwd(), require_absolute=True)
-    if resolved is None:
-        raise ValueError(f"Could not resolve scenario workbook path: {path!r}")
-    return resolved
+    """
+    Resolve a scenario workbook path against the project root (not cwd).
+
+    Relative paths are resolved as <project_root>/<path>. Absolute paths
+    pass through as-is. Raises FileNotFoundError if the resolved file
+    doesn't exist - a missing scenario workbook should fail loudly, not
+    silently attempt to open a path that isn't there.
+    """
+    locator = ProjectFileLocator()
+    return locator.get_project_file(path, must_exist=True)
 
 
 def open_scenario_workbook(path: str | Path) -> xw.Book:
     """
     Open (or attach to, if already open) a disposable test workbook.
 
-    The path is resolved to an absolute, canonical form first (via
-    norm_path) so matching against an already-open instance is reliable
-    regardless of how the caller spelled the path or what the current
-    working directory happens to be.
+    The path is resolved against the project root first (via
+    ProjectFileLocator) so matching against an already-open instance is
+    reliable regardless of how the caller spelled the path or what the
+    current working directory happens to be.
 
     Safe to call freely in test fixtures. Never use this for a production
     workbook - see module docstring.

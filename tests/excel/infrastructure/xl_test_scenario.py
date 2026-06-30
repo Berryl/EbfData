@@ -9,7 +9,7 @@ find_open_book, which only attaches and never opens or closes anything.
 Putting this in its own module keeps that boundary visible at the file
 level, not just in a docstring buried inside a much bigger class.
 """
-from ebf_data.excel.infrastructure.scenario_workbook import open_scenario_workbook, close_scenario_workbook
+from tests.excel.infrastructure.scenario_workbook import open_scenario_workbook, close_scenario_workbook
 from ebf_data.excel.infrastructure.xl_table_base import xlTable
 
 
