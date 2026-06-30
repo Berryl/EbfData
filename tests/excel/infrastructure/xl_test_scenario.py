@@ -9,7 +9,9 @@ find_open_book, which only attaches and never opens or closes anything.
 Putting this in its own module keeps that boundary visible at the file
 level, not just in a docstring buried inside a much bigger class.
 """
-from tests.excel.infrastructure.scenario_workbook import open_scenario_workbook, close_scenario_workbook
+from typing import Self
+
+from scenario_workbook import open_scenario_workbook, close_scenario_workbook
 from ebf_data.excel.infrastructure.xl_table_base import xlTable
 
 
@@ -24,16 +26,7 @@ class xlTestScenario(xlTable):
     ONLY for test workbooks that are safe to open and close freely.
     NEVER for production workbooks (CAGR.xlsm, snapshot.xlsm, etc.).
 
-    Usage (fixture):
-        @pytest.fixture(scope="module")
-        def sut():
-            table = TesterTable()
-            yield table
-            table.close()
-
-    Usage (context manager):
-        with TesterTable() as table:
-            assert len(table.df) == 50
+    see TestTesterTable for a usage example
     """
 
     def __init__(self, workbook_path: str, sheet_name: str, table_name: str) -> None:
@@ -45,12 +38,12 @@ class xlTestScenario(xlTable):
         Close the scenario workbook.
 
         Args:
-            save_changes: if True, saves before closing. Default False
+            save_changes: if True, saves before closing. Default False,
                 so the file is always clean for the next test run.
         """
         close_scenario_workbook(self.book, save_changes)
 
-    def __enter__(self) -> "xlTestScenario":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, *_) -> None:
