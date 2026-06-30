@@ -3,6 +3,7 @@ import pytest
 from xl_base_tester import TesterTable
 
 
+# region assertion helper
 def pd_testing_assert_frame_equal(left, right):
     """
     Thin wrapper so the import only happens where it's used, and the
@@ -18,6 +19,7 @@ def pd_testing_assert_frame_equal(left, right):
             "This is the exact failure mode that damaged production data - "
             "see the original assertion error below.\n\n" + str(e)
         ) from e
+# endregion
 
 
 class TestTesterTable:
@@ -46,7 +48,7 @@ class TestTesterTable:
             (25, "Row-025"),  # middle row
             (49, "Row-049"),  # last row - no neighbor below
         ])
-        def test_update_row_changes_only_the_targeted_row(self, sut: TesterTable, target_index, label):
+        def test_only_the_targeted_row_is_updated(self, sut: TesterTable, target_index, label):
             sut.refresh()
             before = sut.df.copy()
             assert before.loc[target_index, "RowLabel"] == label, (
