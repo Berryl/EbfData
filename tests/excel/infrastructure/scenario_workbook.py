@@ -1,33 +1,5 @@
 """
-Open/close infrastructure for DISPOSABLE TEST WORKBOOKS ONLY.
-
-This module exists for one purpose: letting test fixtures open and close
-scenario workbooks freely - files that exist solely for testing and have
-no other consumers, no live formulas, and no harm done by being opened or
-closed by code.
-
-THIS IS NOT FOR PRODUCTION WORKBOOKS. CAGR.xlsm, snapshot.xlsm, and any
-other live, 24/7 trading workbook must continue to go through
-excel_book_finder.find_open_book(), which only ever ATTACHES to an
-already-open instance and never opens or closes anything. That contract
-does not change and this module must never be used as a substitute for it.
-
-If you're not sure which one to use: if the workbook is something a human
-trader is actively relying on right now, use find_open_book. If it's a
-file that exists only so a test suite has something to open and throw
-away, use this module.
-
-Why this resolves the path via ProjectFileLocator instead of just calling
-xw.Book(str(path)) or resolving against Path.cwd(): xw.Book's own matching
-against already-open instances is sensitive to exactly how the path string
-is spelled - relative vs absolute, case, separators, and critically, what
-the current working directory happens to be when the test process starts.
-A path resolved against cwd() works fine until the test is launched from a
-different working directory (a different IDE config, CI, a teammate
-running from a subfolder) and then silently breaks. Anchoring against the
-PROJECT ROOT (auto-detected via ProjectFileLocator's marker search, e.g.
-.git/pyproject.toml) instead of cwd() makes resolution consistent
-regardless of where the process was launched from.
+Open/close infrastructure for TEST WORKBOOKS ONLY.
 """
 from pathlib import Path
 
@@ -51,14 +23,6 @@ def _resolved(path: str | Path) -> Path:
 def open_scenario_workbook(path: str | Path) -> xw.Book:
     """
     Open (or attach to, if already open) a disposable test workbook.
-
-    The path is resolved against the project root first (via
-    ProjectFileLocator) so matching against an already-open instance is
-    reliable regardless of how the caller spelled the path or what the
-    current working directory happens to be.
-
-    Safe to call freely in test fixtures. Never use this for a production
-    workbook - see module docstring.
     """
     resolved_path = _resolved(path)
 
@@ -66,7 +30,7 @@ def open_scenario_workbook(path: str | Path) -> xw.Book:
         for book in app.books:
             try:
                 book_path = Path(book.fullname).resolve()
-            except Exception:
+            except (FileNotFoundError, NotADirectoryError, ValueError, OSError, RuntimeError):
                 continue
             if book_path == resolved_path:
                 return book
