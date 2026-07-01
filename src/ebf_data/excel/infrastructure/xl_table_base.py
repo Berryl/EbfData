@@ -2,6 +2,7 @@ from typing import List
 
 import pandas as pd
 import xlwings as xw
+from ebf_core.guards import guards as g
 
 
 class xlTable:
@@ -20,6 +21,13 @@ class xlTable:
             self._df = loaded
         assert self._df is not None
         return self._df
+
+    @property
+    def safe_data_body_range(self) -> xw.Range:
+        """Safe access to data_body_range ensures it is not None."""
+        r = self.table.data_body_range
+        g.ensure_not_none(r, f"Table '{self.table.name}' has no data body range. ")
+        return r
 
     def refresh(self) -> pd.DataFrame:
         """Force reload from Excel"""
@@ -98,20 +106,66 @@ class xlTable:
             col_position = columns_in_order.index(column)
             # data_body_range excludes the header row, so (row_position, col_position)
             # maps directly onto the table's data rows/columns.
-            self.table.data_body_range[row_position, col_position].value = value
+            self.safe_data_body_range[row_position, col_position].value = value
             current_df.loc[index_label, column] = value
 
         self._df = current_df
 
-    def update_slice(self, df_slice: pd.DataFrame, start_row: int = 0,columns: List[str] | None = None) -> None:
-        """Update only part of the table"""
-        full_df = self.df.copy()
-        rows = slice(start_row, start_row + len(df_slice))
+    def update_slice(self, df_slice: pd.DataFrame, start_row: int = 0, columns: List[str] | None = None) -> None:
+        """
+        Update a contiguous block of rows, starting at a given position.
 
-        if columns:
-            full_df.loc[rows, columns] = df_slice.values
-        else:
-            full_df.iloc[rows] = df_slice.values
+        start_row is a POSITIONAL index into the table as it exists right
+        now (not a DataFrame .index label - use update_row for that).
+        A fresh refresh() happens before anything is written, so start_row
+        always refers to the table's current layout, never a stale cache.
 
-        self.table.update(full_df, index=False)
-        self._df = full_df
+        Writes ONLY the targeted rows' cells, one cell at a time, via the
+        same mechanism as update_row - never a whole-table positional
+        rewrite. Rewriting the whole table back with index=False assumes
+        the cached DataFrame's row order still matches the live table's
+        row order at write-time, which is not guaranteed; that mismatch
+        is what corrupted data in production previously.
+
+        Args:
+            df_slice: rows to write. Its own row order determines write
+                order, starting at start_row.
+            start_row: positional row index in the live table to start
+                writing at.
+            columns: if given, only these columns are written for each
+                row (df_slice must have these columns). If omitted, all
+                of df_slice's columns are written, in df_slice's column
+                order.
+
+        Raises:
+            IndexError: if start_row + len(df_slice) exceeds the table's
+                current row count.
+            KeyError: if a column in df_slice (or in `columns`) does not
+                exist in the table.
+        """
+        self.refresh()
+        current_df = self.df
+
+        end_row = start_row + len(df_slice)
+        if end_row > len(current_df):
+            raise IndexError(
+                f"update_slice would write rows {start_row}:{end_row}, "
+                f"but table '{self.name}' only has {len(current_df)} rows"
+            )
+
+        target_columns = columns if columns else df_slice.columns.tolist()
+        missing_columns = [c for c in target_columns if c not in current_df.columns]
+        if missing_columns:
+            raise KeyError(f"Columns not found in table '{self.name}': {missing_columns}")
+
+        columns_in_order = current_df.columns.tolist()
+        for offset, (_, slice_row) in enumerate(df_slice.iterrows()):
+            row_position = start_row + offset
+            index_label = current_df.index[row_position]
+            for column in target_columns:
+                value = slice_row[column]
+                col_position = columns_in_order.index(column)
+                self.safe_data_body_range[row_position, col_position].value = value
+                current_df.loc[index_label, column] = value
+
+        self._df = current_df

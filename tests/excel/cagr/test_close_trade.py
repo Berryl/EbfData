@@ -14,11 +14,18 @@ def make_cagr_table(df: pd.DataFrame) -> CagrTable:
     Build a CagrTable backed by a real pandas DataFrame, with the Excel
     boundary (book/sheet/table) fully mocked. No real Excel/COM is touched -
     table.update is a MagicMock we can inspect, never a live workbook.
+
+    table.range.options(...).value is wired to return a copy of df so that
+    refresh() (called inside update_row) doesn't overwrite the test DataFrame
+    with an unconfigured MagicMock. Without this, tests would pass by
+    accident rather than by genuine verification.
     """
     cagr = CagrTable.__new__(CagrTable)  # bypass __init__ -> bypass find_open_book
     cagr.book = MagicMock()
     cagr.sheet = MagicMock()
     cagr.table = MagicMock()
+    cagr.table.data_body_range = MagicMock()
+    cagr.table.range.options.return_value.value = df.copy()
     cagr.name = "CagrTable"
     cagr._df = df
     return cagr
@@ -46,6 +53,7 @@ def sample_df() -> pd.DataFrame:
         "Is Closed": ["", "", ""],
         "Exit Trigger": ["", "", ""],
         "Exit Und Price": [None, None, None],
+        "Exit Fill Time": ["", "", ""],
         "Exit Trade": ["", "", ""],
         "Exp Date": ["2026-06-19", "2026-06-19", "2026-06-19"],
         "Strike Price": [16.50, 18.00, 5.00],
@@ -70,14 +78,16 @@ class TestUpdateRow:
         assert current_df(cagr).loc[10, "Is Closed"] == ""
         assert current_df(cagr).loc[12, "Is Closed"] == ""
 
-    def test_pushes_full_table_back_through_excel(self):
+    def test_writes_via_per_cell_data_body_range_not_whole_table_update(self):
+        """update_row must NEVER call table.update (whole-table positional rewrite).
+        It writes each cell individually via table.data_body_range - that's the
+        fix that prevents values landing on the wrong rows."""
         cagr = make_cagr_table(sample_df())
 
         cagr.update_row(10, {"Is Closed": "Y"})
 
-        cagr.table.update.assert_called_once()
-        pushed_df = cagr.table.update.call_args[0][0]
-        assert pushed_df.loc[10, "Is Closed"] == "Y"
+        cagr.table.update.assert_not_called()
+        cagr.table.data_body_range.__getitem__.assert_called()
 
     def test_raises_on_unknown_index_label(self):
         cagr = make_cagr_table(sample_df())
@@ -106,7 +116,7 @@ class TestCloseTrade:
         """
         This is the essential case: two open SC legs share the same
         Symbol/ID (UUUU, 2). Only the caller's matching logic (not
-        Symbol/ID) can say which one is being closed. close_trade must
+        Symbol/ID) can say which one is being closed. close_trade_leg must
         write to that exact row and leave the other untouched.
         """
         cagr = make_cagr_table(sample_df())
@@ -141,14 +151,14 @@ class TestCloseTrade:
 
     def test_does_not_set_exit_fill_time(self):
         """Exit Fill Time depends on OpexCalendar, not wired in yet - confirm
-        close_trade doesn't invent a placeholder value for it."""
+        close_trade_leg doesn't invent a placeholder value for it."""
         cagr = make_cagr_table(sample_df())
         matched = current_df(cagr).loc[[10]]
 
         cagr.close_trade_leg(matched, TransactionEventType.EXPIRATION, underlying_price=15.30)
 
-        pushed_df = cagr.table.update.call_args[0][0]
-        assert "Exit Fill Time" not in pushed_df.columns or pushed_df.loc[10, "Exit Fill Time"] != "OPEX"
+        assert "Exit Fill Time" not in current_df(cagr).columns or \
+               current_df(cagr).loc[10, "Exit Fill Time"] != "OPEX"
 
     def test_raises_on_empty_match(self):
         cagr = make_cagr_table(sample_df())
@@ -159,7 +169,7 @@ class TestCloseTrade:
             cagr.close_trade_leg(empty, TransactionEventType.EXPIRATION, underlying_price=15.30)
 
     def test_raises_on_multiple_rows_passed(self):
-        """close_trade refuses to guess if the caller hands it more than
+        """close_trade_leg refuses to guess if the caller hands it more than
         one candidate - disambiguation is the caller's job, not ours."""
         cagr = make_cagr_table(sample_df())
         both_uuuu = current_df(cagr).loc[[10, 11]]
