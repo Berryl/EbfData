@@ -8,13 +8,18 @@ from ebf_data.excel.snapshot.snapshot_table import SnapshotTable, CLEARED_SHORT_
 def make_snapshot_table(df: pd.DataFrame) -> SnapshotTable:
     """
     Build a SnapshotTable backed by a real pandas DataFrame, with the Excel
-    boundary (book/sheet/table) fully mocked. No real Excel/COM is touched -
-    table.update is a MagicMock we can inspect, never a live workbook.
+    boundary (book/sheet/table) fully mocked. No real Excel/COM is touched.
+
+    table.range.options(...).value is wired to return a copy of df so that
+    refresh() (called inside update_row) doesn't overwrite the test DataFrame
+    with an unconfigured MagicMock.
     """
     snap = SnapshotTable.__new__(SnapshotTable)
     snap.book = MagicMock()
     snap.sheet = MagicMock()
     snap.table = MagicMock()
+    snap.table.data_body_range = MagicMock()
+    snap.table.range.options.return_value.value = df.copy()
     snap.name = "SnapshotTable"
     snap._df = df
     return snap
@@ -67,11 +72,13 @@ class TestClearShortCallColumns:
         assert snap._df.loc[8, "SC Strike Price"] == 4.0
         assert snap._df.loc[8, "SC Book Price"] == 0.50
 
-    def test_pushes_full_table_back_through_excel(self):
+    def test_writes_via_per_cell_data_body_range_not_whole_table_update(self):
+        """clear_short_call_columns must NEVER call table.update (whole-table
+        positional rewrite). Cells are written individually via
+        data_body_range - same mechanism as update_row."""
         snap = make_snapshot_table(sample_df())
 
         snap.clear_short_call_columns(8)
 
-        snap.table.update.assert_called_once()
-        pushed_df = snap.table.update.call_args[0][0]
-        assert pd.isna(pushed_df.loc[8, "SC Exp Date"])
+        snap.table.update.assert_not_called()
+        snap.table.data_body_range.__getitem__.assert_called()

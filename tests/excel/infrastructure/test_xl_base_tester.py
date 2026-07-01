@@ -1,5 +1,5 @@
 import pytest
-
+import pandas as pd
 from xl_base_tester import TesterTable
 
 
@@ -19,6 +19,8 @@ def pd_testing_assert_frame_equal(left, right):
             "This is the exact failure mode that damaged production data - "
             "see the original assertion error below.\n\n" + str(e)
         ) from e
+
+
 # endregion
 
 
@@ -72,3 +74,75 @@ class TestTesterTable:
             other_rows_before = before.drop(index=target_index)
             other_rows_after = after.drop(index=target_index)
             pd_testing_assert_frame_equal(other_rows_before, other_rows_after)
+
+    class TestUpdateSlice:
+        """
+        Real-Excel proof that update_slice writes ONLY the targeted rows and
+        leaves every other row in the table untouched.
+
+        Covers slices at the start, middle, and end of the table, plus the
+        columns-param path (partial-column write). The same
+        pd_testing_assert_frame_equal assertion used in TestUpdateRow is
+        the actual proof - it would catch any positional rewrite that
+        scrambles untargeted rows.
+        """
+
+        @pytest.mark.parametrize("start_row, row_count, label", [
+            (0, 3, "start"),  # slice at the top - no rows above
+            (23, 4, "middle"),  # slice in the middle
+            (47, 3, "end"),  # slice at the bottom - no rows below
+        ])
+        def test_update_slice_changes_only_targeted_rows(self, sut: TesterTable, start_row, row_count, label):
+            sut.refresh()
+            before = sut.df.copy()
+
+            slice_df = pd.DataFrame({
+                "RowLabel": [f"SLICE-{label}-{i}" for i in range(row_count)],
+                "ValueA": [7777 + i for i in range(row_count)],
+                "ValueB": [8888 + i for i in range(row_count)],
+                "ValueC": [f"slice-{label}-{i}" for i in range(row_count)],
+            })
+
+            sut.update_slice(slice_df, start_row=start_row)
+
+            sut.refresh()
+            after = sut.df
+
+            # targeted rows changed
+            for i in range(row_count):
+                assert after.iloc[start_row + i]["ValueA"] == 7777 + i
+                assert after.iloc[start_row + i]["ValueC"] == f"slice-{label}-{i}"
+
+            # every other row untouched
+            target_positions = list(range(start_row, start_row + row_count))
+            other_before = before.drop(index=before.index[target_positions])
+            other_after = after.drop(index=after.index[target_positions])
+            pd_testing_assert_frame_equal(other_before, other_after)
+
+        def test_update_slice_with_columns_param_leaves_other_columns_alone(self, sut: TesterTable):
+            """The columns param writes only specific columns per row -
+            other columns in the same rows must be untouched."""
+            sut.refresh()
+            before = sut.df.copy()
+
+            slice_df = pd.DataFrame({"ValueA": [5555, 6666]})
+
+            sut.update_slice(slice_df, start_row=10, columns=["ValueA"])
+
+            sut.refresh()
+            after = sut.df
+
+            # ValueA changed
+            assert after.iloc[10]["ValueA"] == 5555
+            assert after.iloc[11]["ValueA"] == 6666
+
+            # ValueB, ValueC, RowLabel in those same rows untouched
+            assert after.iloc[10]["RowLabel"] == before.iloc[10]["RowLabel"]
+            assert after.iloc[10]["ValueC"] == before.iloc[10]["ValueC"]
+            assert after.iloc[11]["RowLabel"] == before.iloc[11]["RowLabel"]
+            assert after.iloc[11]["ValueC"] == before.iloc[11]["ValueC"]
+
+            # all other rows untouched
+            other_before = before.drop(index=before.index[[10, 11]])
+            other_after = after.drop(index=after.index[[10, 11]])
+            pd_testing_assert_frame_equal(other_before, other_after)
