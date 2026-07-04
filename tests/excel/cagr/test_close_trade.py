@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import cast
 from unittest.mock import MagicMock
 
@@ -53,7 +54,7 @@ def sample_df() -> pd.DataFrame:
         "Is Closed": ["", "", ""],
         "Exit Trigger": ["", "", ""],
         "Exit Und Price": [None, None, None],
-        "Exit Fill Time": ["", "", ""],
+        "Exit Fill Time": [None, None, None],
         "Exit Trade": ["", "", ""],
         "Exp Date": ["2026-06-19", "2026-06-19", "2026-06-19"],
         "Strike Price": [16.50, 18.00, 5.00],
@@ -122,7 +123,8 @@ class TestCloseTrade:
         cagr = make_cagr_table(sample_df())
         matched = current_df(cagr).loc[[11]]  # the $18.00 strike leg, specifically
 
-        cagr.close_trade_leg(matched, TransactionEventType.EXPIRATION, underlying_price=15.30)
+        cagr.close_trade_leg(matched, TransactionEventType.EXPIRATION, underlying_price=15.30,
+                             exit_fill_time=datetime(2026, 6, 19, 16, 0, tzinfo=timezone.utc))
 
         assert current_df(cagr).loc[11, "Is Closed"] == "Y"
         assert current_df(cagr).loc[11, "Exit Trigger"] == "OPEX"
@@ -137,7 +139,8 @@ class TestCloseTrade:
         cagr = make_cagr_table(sample_df())
         matched = current_df(cagr).loc[[12]]
 
-        cagr.close_trade_leg(matched, TransactionEventType.ASSIGNMENT, underlying_price=5.45)
+        cagr.close_trade_leg(matched, TransactionEventType.ASSIGNMENT, underlying_price=5.45,
+                             exit_fill_time=datetime(2026, 6, 19, 16, 0, tzinfo=timezone.utc))
 
         assert current_df(cagr).loc[12, "Exit Trade"] == "Assignment"
 
@@ -145,20 +148,22 @@ class TestCloseTrade:
         cagr = make_cagr_table(sample_df())
         matched = current_df(cagr).loc[[12]]
 
-        cagr.close_trade_leg(matched, TransactionEventType.EXERCISE, underlying_price=5.45)
+        cagr.close_trade_leg(matched, TransactionEventType.EXERCISE, underlying_price=5.45,
+                             exit_fill_time=datetime(2026, 6, 19, 16, 0, tzinfo=timezone.utc))
 
         assert current_df(cagr).loc[12, "Exit Trade"] == "Exercise"
 
-    def test_does_not_set_exit_fill_time(self):
-        """Exit Fill Time depends on OpexCalendar, not wired in yet - confirm
-        close_trade_leg doesn't invent a placeholder value for it."""
+    def test_exit_fill_time_is_written_as_supplied(self):
+        """exit_fill_time is now a real parameter - confirm it is written
+        exactly as supplied, with no internal manipulation."""
         cagr = make_cagr_table(sample_df())
         matched = current_df(cagr).loc[[10]]
+        fill_time = datetime(2026, 6, 19, 16, 0, tzinfo=timezone.utc)
 
-        cagr.close_trade_leg(matched, TransactionEventType.EXPIRATION, underlying_price=15.30)
+        cagr.close_trade_leg(matched, TransactionEventType.EXPIRATION,
+                             underlying_price=15.30, exit_fill_time=fill_time)
 
-        assert "Exit Fill Time" not in current_df(cagr).columns or \
-               current_df(cagr).loc[10, "Exit Fill Time"] != "OPEX"
+        assert current_df(cagr).loc[10, "Exit Fill Time"] == fill_time
 
     def test_raises_on_empty_match(self):
         cagr = make_cagr_table(sample_df())
@@ -166,7 +171,8 @@ class TestCloseTrade:
 
         msg = r"closing trade row must contain exactly one row, got 0"
         with pytest.raises(ContractError, match=msg):
-            cagr.close_trade_leg(empty, TransactionEventType.EXPIRATION, underlying_price=15.30)
+            cagr.close_trade_leg(empty, TransactionEventType.EXPIRATION, underlying_price=15.30,
+                                 exit_fill_time=datetime(2026, 6, 19, 16, 0, tzinfo=timezone.utc))
 
     def test_raises_on_multiple_rows_passed(self):
         """close_trade_leg refuses to guess if the caller hands it more than
@@ -176,4 +182,5 @@ class TestCloseTrade:
 
         msg = r"closing trade row must contain exactly one row, got 2"
         with pytest.raises(ContractError, match=msg):
-            cagr.close_trade_leg(both_uuuu, TransactionEventType.EXPIRATION, underlying_price=15.30)
+            cagr.close_trade_leg(both_uuuu, TransactionEventType.EXPIRATION, underlying_price=15.30,
+                                 exit_fill_time=datetime(2026, 6, 19, 16, 0, tzinfo=timezone.utc))

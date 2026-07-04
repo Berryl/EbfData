@@ -1,6 +1,7 @@
 import pandas as pd
 from ebf_core.guards import guards as g
 from ebf_core.guards.guards import ContractError
+from ebf_trading.domain.date_time.market_days import market_close_datetime
 from ebf_trading.domain.entities.transaction_events.transaction_event_type import TransactionEventType
 
 from ebf_data.excel.cagr.cagr_table import CagrTable
@@ -91,7 +92,8 @@ class OpexProcessor:
 
     def _close_trade_in_cagr(self, match: pd.DataFrame, row: pd.Series, event: TransactionEventType) -> None:
         underlying_price = row['Last Price']
-        self._cagr.close_trade_leg(match, event, underlying_price)
+        exit_fill_time = market_close_datetime(row['SC Exp Date'])
+        self._cagr.close_trade_leg(match, event, underlying_price, exit_fill_time)
 
     @staticmethod
     def _parse_premium(entry_trade: str) -> float:

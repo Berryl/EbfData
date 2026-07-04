@@ -35,6 +35,7 @@ class TestCloseOutExpiredShortCallsClearsSnapshot:
         to_close = pd.DataFrame({
             "Symbol": ["FCX_20"],
             "Last Price": [15.30],
+            "SC Exp Date": ["2026-06-19"],
         }, index=[99])  # deliberately non-trivial index
 
         snapshot_mock = MagicMock()
@@ -102,12 +103,13 @@ class TestCloseOutExpiredShortCallsClearsSnapshot:
         snapshot_mock.clear_short_call_columns.assert_not_called()
 
     def test_continues_to_next_row_after_a_skip_and_still_clears_the_good_one(self):
-        """Two rows: first has no open SC (skipped), second succeeds. The
+        """Two rows: the first has no open SC (skipped), the second succeeds. The
         skip must not prevent the second row from being processed and
         cleared, and only the second row's index should be cleared."""
         to_close = pd.DataFrame({
-            "Symbol": ["BADSYM_1", "FCX_20"],
+            "Symbol": ["CLOSED_1", "FCX_20"],
             "Last Price": [1.00, 15.30],
+            "SC Exp Date": ["2026-06-19", "2026-06-19"],
         }, index=[50, 99])
 
         snapshot_mock = MagicMock()
@@ -117,7 +119,7 @@ class TestCloseOutExpiredShortCallsClearsSnapshot:
         good_candidate = make_open_sc_candidate(id_val=20)
 
         cagr_mock = MagicMock()
-        # first row (BADSYM_1) -> no open SC; second row (FCX_20) -> matches
+        # first row (CLOSED_1) -> no open SC; second row (FCX_20) -> matches
         cagr_mock.get_trade.side_effect = [empty, good_candidate]
         cagr_mock.by_position.side_effect = [empty, good_candidate]
         cagr_mock.where_open.side_effect = [empty, good_candidate]

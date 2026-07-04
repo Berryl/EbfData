@@ -19,14 +19,14 @@ class xlTable:
         if self._df is None:
             loaded = self.table.range.options(pd.DataFrame, header=1, index=False, chunksize=5000).value
             self._df = loaded
-        assert self._df is not None
+        g.ensure_not_none(self._df, f"Table '{self.table.name}' must be empty since dataframe is None.")
         return self._df
 
     @property
     def safe_data_body_range(self) -> xw.Range:
         """Safe access to data_body_range ensures it is not None."""
         r = self.table.data_body_range
-        g.ensure_not_none(r, f"Table '{self.table.name}' has no data body range. ")
+        g.ensure_not_none(r, f"Table '{self.table.name}' has no data body range.")
         return r
 
     def refresh(self) -> pd.DataFrame:

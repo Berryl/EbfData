@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import pandas as pd
 from ebf_core.guards import guards as g
 from ebf_trading.domain.entities.transaction_events.transaction_event_type import TransactionEventType
@@ -44,11 +46,13 @@ class CagrTable(xlTable):
         self._ensure_symbol_exists(symbol_trades, symbol)
         return int(symbol_trades["ID"].max())
 
-    def close_trade_leg(self, row: pd.DataFrame, event: TransactionEventType, underlying_price: float) -> None:
+    def close_trade_leg(self,
+                        row: pd.DataFrame,
+                        event: TransactionEventType,
+                        underlying_price: float | int,
+                        exit_fill_time: datetime) -> None:
         """
         Close out a single open trade leg in CAGR.
-
-        TODO: wire 'Exit Fill Time' using EbfTrading's OpexCalendar
         """
         g.ensure_true(len(row) == 1, f"closing trade row must contain exactly one row, got {len(row)}")
 
@@ -58,7 +62,7 @@ class CagrTable(xlTable):
             "Is Closed": "Y",
             "Exit Trigger": "OPEX",
             "Exit Und Price": underlying_price,
-            "Exit Fill Time": "06/26/2026  04:00:00 PM",
+            "Exit Fill Time": exit_fill_time,
             "Exit Trade": event.value.capitalize(),
         })
 
