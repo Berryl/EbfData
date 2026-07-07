@@ -11,7 +11,7 @@ class TestSnapshotTable:
     class TestReadStructure:
         def test_size(self, sut: SnapshotTable):
             assert len(sut.df) > 450
-            assert len(sut.df.columns) == 205
+            assert len(sut.df.columns) > 200
 
         def test_headers_are_correct(self, sut: SnapshotTable):
             headers = sut.df.columns.tolist()

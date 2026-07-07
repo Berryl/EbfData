@@ -14,30 +14,40 @@ Registration (one-time, in the xlwings ribbon):
     - UDF Modules: buy_to_close_rule_udfs
     Then click "Import Python UDFs".
 """
-
-import datetime as dt
 from datetime import date
 
 import xlwings as xw
 
 from ebf_core.date_time.python_dates import to_date
 from ebf_core.date_time.term import Term
-from ebf_domain.money.money import Money
+from ebf_domain.money.money import Money, to_excel
 from ebf_trading.domain.value_objects.option_specific.exit_strategies.buy_to_close_rule import BuyToCloseRule
 
 
-def _make_rule(start_date, end_date, premium, evaluation_date=None) -> BuyToCloseRule:
+def _make_rule(start_date, end_date, premium, evaluation_date=None):
     term = Term(start=to_date(start_date), end=to_date(end_date))
+    eval_date = _resolve_date(evaluation_date)
     return BuyToCloseRule(
         term=term,
         premium=Money.mint(premium),
-        evaluation_date=to_date(evaluation_date) if evaluation_date else date.today(),
+        evaluation_date=eval_date,
     )
 
 
+def _resolve_date(value):
+    """Resolve an Excel cell value to a date, defaulting to today if blank."""
+    if value is None or value == "" or value == 0:
+        return date.today()
+    return to_date(value)
+
+
 @xw.func
-def btc_next_cutoff_date(start_date: dt.datetime, end_date: dt.datetime,
-                         evaluation_date: dt.datetime = None) -> dt.datetime:
+def btc_test(x):
+    return str(type(x)) + " | " + str(x)
+
+
+@xw.func
+def btc_next_cutoff_date(start_date, end_date, evaluation_date=None):
     """
     Next BTC cutoff date for a short option contract.
 
@@ -58,8 +68,7 @@ def btc_next_cutoff_date(start_date: dt.datetime, end_date: dt.datetime,
 
 
 @xw.func
-def btc_max_buyback_amount(start_date: dt.datetime, end_date: dt.datetime,
-                           premium: float, evaluation_date: dt.datetime = None) -> float:
+def btc_max_buyback_amount(start_date, end_date, premium, evaluation_date=None):
     """
     The maximum price at which buying back this contract makes sense.
 
@@ -74,16 +83,14 @@ def btc_max_buyback_amount(start_date: dt.datetime, end_date: dt.datetime,
     """
     try:
         rule = _make_rule(start_date, end_date, premium, evaluation_date)
-        return float(rule.max_buyback_amount)
+        return to_excel(rule.max_buyback_amount)
     except Exception as e:
         return f"#ERR: {e}"
 
 
 @xw.func
-def btc_should_buy_back(start_date: dt.datetime, end_date: dt.datetime,
-                        premium: float, current_ask: float,
-                        evaluation_date: dt.datetime = None,
-                        ask_override: float = None) -> bool:
+def btc_should_buy_back(start_date, end_date, premium, current_ask,
+                        evaluation_date=None, ask_override=None):
     """
     Returns TRUE if the contract should be bought back now.
 
