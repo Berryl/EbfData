@@ -1,10 +1,11 @@
+
 from tests.excel.infrastructure.xl_test_scenario import xlTestScenario
 
-XL_BASE_WB = "resources/testing/xlBaseTester.xlsx"
-XL_BASE_WKS = "Sheet1"
-XL_BASE_TABLE = "GenericTable"
+SNAP_SC_WB = "resources/scenarios/snapshot SCs.xlsx"
+SNAP_SC_WKS = "SNAP"
+SNAP_SC_TABLE = "SnapshotTable"
 
 
-class SnapshotScTable(xlTestScenario):
+class SnapshotScenarioTable(xlTestScenario):
     def __init__(self) -> None:
-        super().__init__(XL_BASE_WB, XL_BASE_WKS, XL_BASE_TABLE)
+        super().__init__(SNAP_SC_WB, SNAP_SC_WKS, SNAP_SC_TABLE)

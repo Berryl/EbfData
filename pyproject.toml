@@ -18,6 +18,7 @@ dependencies = [
     "ebf-domain",
     "ebf-trading",
     "xlwings>=0.36.7",
+    "yfinance>=1.5.1",
 ]
 
 [project.license]
@@ -91,12 +92,13 @@ check_untyped_defs = true
 
 [tool.pytest.ini_options]
 testpaths = [
-    "tests",
+   "tests",
 ]
 python_files = [
     "test_*.py",
     "*_test.py",
 ]
 pythonpath = [
-    ".",
+    "src",
+    "tests",
 ]

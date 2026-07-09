@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from tests.excel.infrastructure.scenario_workbook import (
+from scenario_workbook import (
     open_scenario_workbook,
     close_scenario_workbook,
     _resolved,
@@ -108,10 +108,10 @@ class TestOpenScenarioWorkbook:
         xw_book_mock.assert_called_once()
 
     def test_skips_books_with_unreadable_fullname_without_crashing(self, monkeypatch, workbook_file):
-        """A book whose .fullname raises (e.g. a book in a broken state)
+        """A book whose .fullname raises (e.g., a book in a broken state)
         should not crash the matching loop - just be skipped."""
         broken_book = MagicMock()
-        type(broken_book).fullname = property(lambda self: (_ for _ in ()).throw(RuntimeError("boom")))
+        type(broken_book).fullname = property(lambda f: (_ for _ in ()).throw(RuntimeError("boom")))
         app = make_app(books=[broken_book])
         monkeypatch.setattr("scenario_workbook.xw.apps", [app])
 
