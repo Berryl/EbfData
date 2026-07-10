@@ -1,4 +1,4 @@
-from tests.excel.infrastructure.xl_test_scenario import xlTestScenario
+from tests.excel.infrastructure.fixtures.xl_test_scenario import xlTestScenario
 
 SNAP_SC_WB = "resources/scenarios/snapshot SCs.xlsx"
 SNAP_SC_WKS = "SNAP"

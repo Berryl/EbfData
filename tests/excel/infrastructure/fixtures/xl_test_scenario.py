@@ -12,7 +12,7 @@ level, not just in a docstring buried inside a much bigger class.
 from typing import Self
 
 from ebf_data.excel.infrastructure.xl_table_base import xlTable
-from tests.excel.infrastructure.scenario_workbook import open_scenario_workbook, close_scenario_workbook
+from tests.excel.infrastructure.fixtures.scenario_workbook import open_scenario_workbook, close_scenario_workbook
 
 
 class xlTestScenario(xlTable):

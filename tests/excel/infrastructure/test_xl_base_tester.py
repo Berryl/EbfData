@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from tests.excel.infrastructure.xl_base_tester import TesterTable
+from tests.excel.infrastructure.fixtures.xl_base_tester import TesterTable
 
 
 # region assertion helper

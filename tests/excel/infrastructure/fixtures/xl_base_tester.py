@@ -1,4 +1,4 @@
-from tests.excel.infrastructure.xl_test_scenario import xlTestScenario
+from tests.excel.infrastructure.fixtures.xl_test_scenario import xlTestScenario
 
 XL_BASE_WB = "resources/testing/xlBaseTester.xlsx"
 XL_BASE_WKS = "Sheet1"

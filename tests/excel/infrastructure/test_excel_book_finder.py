@@ -1,4 +1,3 @@
-from sys import path
 from types import SimpleNamespace
 
 import pytest

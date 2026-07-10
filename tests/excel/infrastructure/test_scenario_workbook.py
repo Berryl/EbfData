@@ -4,11 +4,16 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from tests.excel.infrastructure.scenario_workbook import (
+from tests.excel.infrastructure.fixtures.scenario_workbook import (
     open_scenario_workbook,
     close_scenario_workbook,
     _resolved,
 )
+
+
+# region Module path for monkeypatching
+MODULE_PATH = "tests.excel.infrastructure.fixtures.scenario_workbook."
+# endregion
 
 
 # region Fixtures
@@ -17,9 +22,8 @@ def project_root(tmp_path, monkeypatch):
     """Create a fake project with .git marker and nested cwd."""
     root = tmp_path / "fake_project"
     root.mkdir()
-    (root / ".git").mkdir()  # marker for ProjectFileLocator
+    (root / ".git").mkdir()
 
-    # Simulate running tests from a deep subdirectory
     nested_cwd = root / "some" / "deep" / "subdir"
     nested_cwd.mkdir(parents=True)
     monkeypatch.chdir(nested_cwd)
@@ -42,6 +46,9 @@ def make_book(fullname: str):
 def make_app(books=None):
     return SimpleNamespace(books=books or [])
 # endregion
+
+
+# region Tests
 
 
 class TestResolved:
@@ -72,10 +79,10 @@ class TestOpenScenarioWorkbook:
         already_open = make_book(fullname=str(workbook_file))
         app = make_app([already_open])
 
-        monkeypatch.setattr("tests.excel.infrastructure.scenario_workbook.xw.apps", [app])
+        monkeypatch.setattr(f"{MODULE_PATH}xw.apps", [app])
 
         xw_book_mock = MagicMock()
-        monkeypatch.setattr("tests.excel.infrastructure.scenario_workbook.xw.Book", xw_book_mock)
+        monkeypatch.setattr(f"{MODULE_PATH}xw.Book", xw_book_mock)
 
         result = open_scenario_workbook("xlBaseTester.xlsx")
 
@@ -87,20 +94,20 @@ class TestOpenScenarioWorkbook:
         other_book = make_book(fullname=str(workbook_file.parent / "other.xlsx"))
         app = make_app([other_book])
 
-        monkeypatch.setattr("tests.excel.infrastructure.scenario_workbook.xw.apps", [app])
+        monkeypatch.setattr(f"{MODULE_PATH}xw.apps", [app])
 
         xw_book_mock = MagicMock()
-        monkeypatch.setattr("tests.excel.infrastructure.scenario_workbook.xw.Book", xw_book_mock)
+        monkeypatch.setattr(f"{MODULE_PATH}xw.Book", xw_book_mock)
 
         open_scenario_workbook("xlBaseTester.xlsx")
 
         xw_book_mock.assert_called_once()
 
     def test_opens_new_book_when_no_apps_running(self, monkeypatch, workbook_file):
-        monkeypatch.setattr("tests.excel.infrastructure.scenario_workbook.xw.apps", [])
+        monkeypatch.setattr(f"{MODULE_PATH}xw.apps", [])
 
         xw_book_mock = MagicMock()
-        monkeypatch.setattr("tests.excel.infrastructure.scenario_workbook.xw.Book", xw_book_mock)
+        monkeypatch.setattr(f"{MODULE_PATH}xw.Book", xw_book_mock)
 
         open_scenario_workbook("xlBaseTester.xlsx")
 
@@ -112,17 +119,17 @@ class TestOpenScenarioWorkbook:
         type(broken_book).fullname = property(lambda _: (_ for _ in ()).throw(RuntimeError("boom")))
 
         app = make_app([broken_book])
-        monkeypatch.setattr("tests.excel.infrastructure.scenario_workbook.xw.apps", [app])
+        monkeypatch.setattr(f"{MODULE_PATH}xw.apps", [app])
 
         xw_book_mock = MagicMock()
-        monkeypatch.setattr("tests.excel.infrastructure.scenario_workbook.xw.Book", xw_book_mock)
+        monkeypatch.setattr(f"{MODULE_PATH}xw.Book", xw_book_mock)
 
         open_scenario_workbook("xlBaseTester.xlsx")
 
         xw_book_mock.assert_called_once()
 
     def test_raises_when_file_does_not_exist(self, monkeypatch):
-        monkeypatch.setattr("tests.excel.infrastructure.scenario_workbook.xw.apps", [])
+        monkeypatch.setattr(f"{MODULE_PATH}xw.apps", [])
 
         with pytest.raises(FileNotFoundError):
             open_scenario_workbook("does_not_exist.xlsx")
@@ -143,3 +150,4 @@ class TestCloseScenarioWorkbook:
 
         book.save.assert_called_once()
         book.close.assert_called_once()
+# endregion
