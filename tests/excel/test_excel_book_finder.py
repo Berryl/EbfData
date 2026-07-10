@@ -1,9 +1,10 @@
+from sys import path
 from types import SimpleNamespace
 
 import pytest
 
 from ebf_data.excel.cagr.cagr_table import CAGR_WB, CAGR_WKS, ACB
-from ebf_data.excel.excel_book_finder import find_open_book, get_named_value
+from ebf_data.excel.infrastructure.excel_book_finder import find_open_book, get_named_value
 
 
 def make_book(name, fullname=None):
@@ -16,13 +17,14 @@ def make_app(pid, books):
         book.app = app
     return app
 
+folder_path = "ebf_data.excel.infrastructure.excel_book_finder."
 
 @pytest.mark.integration
 class TestWbFinder:
     class TestFindOpenBook:
 
         def test_raises_when_no_excel_running(self, monkeypatch):
-            monkeypatch.setattr("ebf_data.excel.excel_book_finder.xw.apps", [])
+            monkeypatch.setattr(f"{folder_path}xw.apps", [])
 
             with pytest.raises(RuntimeError, match="No running Excel instance"):
                 find_open_book("snapshot.xlsm")
@@ -30,7 +32,7 @@ class TestWbFinder:
         def test_raises_when_workbook_not_open(self, monkeypatch):
             other_book = make_book("other.xlsm")
             app = make_app(pid=111, books=[other_book])
-            monkeypatch.setattr("ebf_data.excel.excel_book_finder.xw.apps", [app])
+            monkeypatch.setattr(f"{folder_path}xw.apps", [app])
 
             with pytest.raises(FileNotFoundError, match="Open Excel workbook not found: snapshot.xlsm"):
                 find_open_book("snapshot.xlsm")
@@ -39,7 +41,7 @@ class TestWbFinder:
             target = make_book("snapshot.xlsm", fullname=r"C:\trading\snapshot.xlsm")
             decoy = make_book("other.xlsm")
             app = make_app(pid=111, books=[decoy, target])
-            monkeypatch.setattr("ebf_data.excel.excel_book_finder.xw.apps", [app])
+            monkeypatch.setattr(f"{folder_path}xw.apps", [app])
 
             result = find_open_book("snapshot.xlsm")
 
@@ -48,7 +50,7 @@ class TestWbFinder:
         def test_match_is_case_insensitive(self, monkeypatch):
             target = make_book("Snapshot.XLSM")
             app = make_app(pid=111, books=[target])
-            monkeypatch.setattr("ebf_data.excel.excel_book_finder.xw.apps", [app])
+            monkeypatch.setattr(f"{folder_path}xw.apps", [app])
 
             result = find_open_book("snapshot.xlsm")
 
@@ -58,7 +60,7 @@ class TestWbFinder:
             dupe_1 = make_book("snapshot.xlsm", fullname=r"C:\live\snapshot.xlsm")
             dupe_2 = make_book("snapshot.xlsm", fullname=r"C:\backup\snapshot.xlsm")
             app = make_app(pid=111, books=[dupe_1, dupe_2])
-            monkeypatch.setattr("ebf_data.excel.excel_book_finder.xw.apps", [app])
+            monkeypatch.setattr(f"{folder_path}xw.apps", [app])
 
             with pytest.raises(RuntimeError, match="Multiple open workbooks named 'snapshot.xlsm'"):
                 find_open_book("snapshot.xlsm")
@@ -68,7 +70,7 @@ class TestWbFinder:
             dupe_2 = make_book("snapshot.xlsm", fullname=r"C:\stale\snapshot.xlsm")
             app_1 = make_app(pid=111, books=[dupe_1])
             app_2 = make_app(pid=222, books=[dupe_2])
-            monkeypatch.setattr("ebf_data.excel.excel_book_finder.xw.apps", [app_1, app_2])
+            monkeypatch.setattr(f"{folder_path}xw.apps", [app_1, app_2])
 
             with pytest.raises(RuntimeError) as exc_info:
                 find_open_book("snapshot.xlsm")

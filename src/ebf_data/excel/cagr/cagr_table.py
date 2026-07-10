@@ -4,7 +4,7 @@ import pandas as pd
 from ebf_core.guards import guards as g
 from ebf_trading.domain.entities.transaction_events.transaction_event_type import TransactionEventType
 
-from ebf_data.excel.excel_book_finder import find_open_book
+from ebf_data.excel.infrastructure.excel_book_finder import find_open_book
 from ebf_data.excel.infrastructure.xl_table_base import xlTable
 
 CAGR_WB = "CAGR.xlsm"

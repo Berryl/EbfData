@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from scenario_workbook import (
+from tests.excel.infrastructure.scenario_workbook import (
     open_scenario_workbook,
     close_scenario_workbook,
     _resolved,
