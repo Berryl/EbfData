@@ -1,4 +1,3 @@
-
 from tests.excel.infrastructure.xl_test_scenario import xlTestScenario
 
 SNAP_SC_WB = "resources/scenarios/snapshot SCs.xlsx"
