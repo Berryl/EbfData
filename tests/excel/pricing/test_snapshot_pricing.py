@@ -19,3 +19,7 @@ class TestSnapshotPricingTable:
             assert "SC DTE" in headers
             assert "SC Intrinsic Value" in headers
             assert "GUID Lookup" in headers
+
+    class  TestPriceUpdater:
+        def test_updates_last_price(self, sut):
+            pass
