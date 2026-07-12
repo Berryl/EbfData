@@ -1,16 +1,13 @@
 """
 Price updater for snapshot positions.
 
-Reads active rows from SnapshotTable (where the Position column is non-blank),
-extracts unique base symbols, fetches current prices from yFinance
-in a single batch call, and writes Last Price back to each row.
+Reads rows from SnapshotTable according to the requested scope,
+extracts unique base symbols, delegates price fetching to an injected
+PriceFetcher, and writes Last Price back to each matching row.
 
 Symbols with non-standard suffixes (e.g., CCJ_17, MARA_4.1) are
 reduced to their base ticker (everything before the first '_') for
-the yFinance fetch, then matched back to all rows sharing that ticker.
-
-Failures per symbol are logged as warnings - Last Price is left
-unchanged for any symbol yFinance cannot price.
+fetching, then matched back to all rows sharing that ticker.
 
 After each run:
 - The named range LastPriceRunInfo receives a DV input message
@@ -19,26 +16,34 @@ After each run:
   DV input message flagging the specific failure.
 """
 import logging
+import time
 from datetime import datetime
+from enum import StrEnum, auto
 
 import pandas as pd
-import yfinance as yf
-from ebf_core.date_time.formatting import get_formatted_datetime
 
+from ebf_core.date_time.formatting import get_formatted_datetime, get_formatted_time_no_tz
+from ebf_data.excel.pricing.price_fetcher import PriceFetcher, PriceUpdateResult
+from ebf_data.excel.pricing.yfinance_fetcher import YFinanceFetcher
 from ebf_data.excel.snapshot.snapshot_table import SnapshotTable
 
 logger = logging.getLogger(__name__)
 
-# xlValidateInputOnly - shows an input message with no value constraint
 _XL_VALIDATE_INPUT_ONLY = 0
+
+
+class PriceUpdateScope(StrEnum):
+    ALL = auto()       # all active positions (determined by the Position being non-blank)
+    SELECTED = auto()  # rows intersecting the current Excel selection
+    VISIBLE = auto()   # rows not hidden by an active filter
 
 
 def _extract_base_symbol(snapshot_symbol: str) -> str:
     """
     Examples:
-        'BA'      -> 'BA'
-        'CCJ_17'  -> 'CCJ'
-        'MARA_4.1'-> 'MARA'
+        'BA'       -> 'BA'
+        'CCJ_17'   -> 'CCJ'
+        'MARA_4.1' -> 'MARA'
     """
     return snapshot_symbol.split("_")[0]
 
@@ -65,16 +70,8 @@ def _set_dv_message(rng, title: str, message: str) -> None:
 
 class PriceUpdater:
     """
-    Fetches current market prices from yFinance and writes them back
-    to the Last Price column of a SnapshotTable.
-
-    Only updates rows where Position is non-blank (active positions).
-    Leaves Last Price unchanged for any symbol that cannot be priced
-    and logs a warning for each failure.
-
-    After each run, writes a summary DV message to the named range
-    LastPriceRunInfo, and per-cell DV messages on any Last Price cell
-    whose symbol failed to price.
+    Writes current market prices into the Last Price column using the injected PriceFetcher.
+    The scope parameter controls which rows (Symbols) are targeted. See PriceUpdateScope
     """
 
     POSITION_COLUMN = "Position"
@@ -83,36 +80,41 @@ class PriceUpdater:
     RUN_INFO_RANGE = "LastPriceRunInfo"
     DV_TITLE = "YFinance Pricing"
 
-    def __init__(self, snapshot: SnapshotTable) -> None:
+    def __init__(self,
+                 snapshot: SnapshotTable,
+                 fetcher: PriceFetcher | None = None) -> None:
         self._snapshot = snapshot
+        self._fetcher = fetcher or YFinanceFetcher()
 
-    def update_prices(self) -> None:
+    def update_prices(self,scope: PriceUpdateScope = PriceUpdateScope.ALL) -> PriceUpdateResult:
         """
-        Fetch and write current prices for all active snapshot positions.
+        Fetch and write current prices for snapshot rows in the given scope.
 
-        Active = Position column is non-blank. Processes all active rows
-        in a single yFinance batch call for efficiency.
+        Returns a PriceUpdateResult with symbol counts, failure list, and elapsed time.
         """
+        start = time.monotonic()
+        result = PriceUpdateResult()
+
         self._snapshot.refresh()
         df = self._snapshot.df
 
-        active = df[df[self.POSITION_COLUMN].notna() & (df[self.POSITION_COLUMN] != "")]
-        if active.empty:
-            logger.info("No active positions found - nothing to update")
-            return
+        target = self._select_rows(df, scope)
+        if target.empty:
+            logger.info(f"No rows to update for scope={scope}")
+            result.elapsed_seconds = time.monotonic() - start
+            return result
 
-        # Map base ticker -> list of DataFrame index labels that share it
         ticker_to_indices: dict[str, list] = {}
-        for idx, row in active.iterrows():
+        for idx, row in target.iterrows():
             ticker = _extract_base_symbol(str(row[self.SYMBOL_COLUMN]))
             ticker_to_indices.setdefault(ticker, []).append(idx)
 
         tickers = list(ticker_to_indices.keys())
-        logger.info(f"Fetching prices for {len(tickers)} symbol(s): {tickers}")
+        result.total_symbols = len(tickers)
+        logger.info(f"Fetching prices for {len(tickers)} symbol(s) [{scope}]: {tickers}")
 
-        prices = self._fetch_prices(tickers)
+        prices = self._fetcher.fetch_prices(tickers)
 
-        updated = 0
         failed_tickers: list[str] = []
 
         for ticker, indices in ticker_to_indices.items():
@@ -124,10 +126,82 @@ class PriceUpdater:
                 continue
             for idx in indices:
                 self._snapshot.update_row(idx, {self.LAST_PRICE_COLUMN: price})
-                updated += 1
+                result.updated += 1
 
-        self._write_run_summary(updated, len(tickers), failed_tickers)
-        logger.info(f"Updated Last Price for {updated} row(s)")
+        result.failed = failed_tickers
+        result.elapsed_seconds = time.monotonic() - start
+
+        self._write_run_summary(result.updated, result.total_symbols, failed_tickers, scope)
+        logger.info(
+            f"Updated Last Price for {result.updated} row(s) "
+            f"in {result.elapsed_seconds:.1f}s"
+        )
+
+        return result
+
+    def _select_rows(self, df: pd.DataFrame, scope: PriceUpdateScope) -> pd.DataFrame:
+        """Return the subset of df rows to update for the given scope."""
+        if scope == PriceUpdateScope.ALL:
+            return df[df[self.POSITION_COLUMN].notna() & (df[self.POSITION_COLUMN] != "")]
+
+        if scope == PriceUpdateScope.SELECTED:
+            return self._rows_in_selection(df)
+
+        if scope == PriceUpdateScope.VISIBLE:
+            return self._visible_rows(df)
+
+        return df.iloc[0:0]  # empty - unknown scope
+
+    def _rows_in_selection(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Return rows whose position in the table intersects the current
+        Excel selection. Uses Application.Intersect against the Symbol
+        column to find matching rows regardless of which column is active.
+        """
+        try:
+            symbol_col_range = self._snapshot.table.data_body_range.columns[
+                df.columns.get_loc(self.SYMBOL_COLUMN)
+            ]
+            selection = self._snapshot.sheet.api.Application.Selection
+            intersection = self._snapshot.sheet.api.Application.Intersect(
+                symbol_col_range.api, selection
+            )
+            if intersection is None:
+                logger.info("Selection does not intersect the Symbol column")
+                return df.iloc[0:0]
+
+            # Collect DataFrame positional indices from the intersected rows
+            table_start_row = self._snapshot.table.data_body_range.row
+            selected_positions = []
+            for area in intersection.Areas:
+                for r in range(area.Row, area.Row + area.Rows.Count):
+                    position = r - table_start_row
+                    if 0 <= position < len(df):
+                        selected_positions.append(position)
+
+            return df.iloc[selected_positions]
+
+        except Exception as e:
+            logger.error(f"Could not determine selection - falling back to ALL: {e}")
+            return df[df[self.POSITION_COLUMN].notna() & (df[self.POSITION_COLUMN] != "")]
+
+    def _visible_rows(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Return those rows which are not hidden by an active filter. Checks each row's
+        Hidden state via COM rather than using SpecialCells, which can
+        raise when no cells match or when there is no active filter.
+        """
+        try:
+            data_body = self._snapshot.table.data_body_range
+            visible_positions = [
+                i for i in range(len(df))
+                if not data_body.rows[i].api.EntireRow.Hidden
+            ]
+            return df.iloc[visible_positions]
+
+        except Exception as e:
+            logger.error(f"Could not determine visible rows - falling back to ALL: {e}")
+            return df[df[self.POSITION_COLUMN].notna() & (df[self.POSITION_COLUMN] != "")]
 
     def _flag_failed_rows(self, ticker: str, indices: list) -> None:
         """Set a DV error message on each Last Price cell for a failed ticker."""
@@ -137,91 +211,15 @@ class PriceUpdater:
             cell = self._snapshot.table.data_body_range[row_position, col_index]
             _set_dv_message(cell, self.DV_TITLE, f"⚠ No price available for {ticker}")
 
-    def _write_run_summary(self, updated: int, total: int, failed: list[str]) -> None:
+    def _write_run_summary(self, updated: int, total: int,
+                           failed: list[str], scope: PriceUpdateScope) -> None:
         """Write a run summary DV message to the LastPriceRunInfo named range."""
         try:
             run_info_range = self._snapshot.book.names[self.RUN_INFO_RANGE].refers_to_range
-
-            timestamp = get_formatted_datetime(datetime.now())
-
-            message = f"updated {updated} of {total} symbols\n{timestamp}"
+            timestamp = get_formatted_datetime(datetime.now(), time_fmt=get_formatted_time_no_tz)
+            message = f"updated {updated} of {total} symbols [{scope}]\n{timestamp}"
             if failed:
                 message += f"\nFailed: {', '.join(failed)}"
-
             _set_dv_message(run_info_range, self.DV_TITLE, message)
         except Exception as e:
             logger.warning(f"Could not write run summary to {self.RUN_INFO_RANGE}: {e}")
-
-    @staticmethod
-    def _fetch_prices(tickers: list[str]) -> dict[str, float | None]:
-        """
-        Fetch the most recent price for each ticker via yFinance.
-
-        Primary method: yf.Tickers.info (best for current/last price)
-        Fallback: yf.download with group_by='ticker' for consistency.
-        Returns dict mapping ticker -> price (float) or None if unavailable.
-        """
-        if not tickers:
-            return {}
-
-        prices: dict[str, float | None] = {}
-        failed: list[str] = []
-
-        # === PRIMARY METHOD: yf.Tickers.info ===
-        try:
-            yftickers = yf.Tickers(" ".join(tickers))
-            for ticker in tickers:
-                try:
-                    info = yftickers.tickers[ticker].info
-                    # Best fields for current/last traded price
-                    price = (
-                        info.get("currentPrice")
-                        or info.get("regularMarketPrice")
-                        or info.get("previousClose")
-                    )
-                    prices[ticker] = float(price) if price is not None else None
-                except Exception as e:
-                    logger.warning(f"Could not get price info for {ticker}: {e}")
-                    prices[ticker] = None
-                    failed.append(ticker)
-
-        except Exception as e:
-            logger.warning(f"yFinance Tickers failed ({e}), falling back to download...")
-
-            # === FALLBACK: yf.download() ===
-            try:
-                data: pd.DataFrame = yf.download(
-                    tickers=tickers,
-                    period="1d",
-                    interval="1m",
-                    group_by="ticker",
-                    auto_adjust=True,
-                    prepost=True,           # include after-hours data if available
-                    progress=False,
-                    threads=True,
-                )
-
-                for ticker in tickers:
-                    try:
-                        # Handle both single-ticker (flat) and multi-ticker cases
-                        if len(tickers) == 1 and not isinstance(data.columns, pd.MultiIndex):
-                            close_series = data["Close"]
-                        else:
-                            close_series = data[ticker]["Close"]
-
-                        close = close_series.dropna()
-                        prices[ticker] = float(close.iloc[-1]) if not close.empty else None
-
-                    except Exception as inner_e:
-                        logger.warning(f"Could not extract price for {ticker}: {inner_e}")
-                        prices[ticker] = None
-                        failed.append(ticker)
-
-            except Exception as download_e:
-                logger.error(f"yFinance download fallback also failed: {download_e}")
-                prices = {t: None for t in tickers}
-
-        if failed:
-            logger.warning(f"Failed to fetch prices for: {', '.join(failed)}")
-
-        return prices
