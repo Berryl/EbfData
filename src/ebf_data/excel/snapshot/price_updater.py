@@ -21,8 +21,8 @@ from datetime import datetime
 from enum import StrEnum, auto
 
 import pandas as pd
-
 from ebf_core.date_time.formatting import get_formatted_datetime, get_formatted_time_no_tz
+
 from ebf_data.excel.pricing.price_fetcher import PriceFetcher, PriceUpdateResult
 from ebf_data.excel.pricing.yfinance_fetcher import YFinanceFetcher
 from ebf_data.excel.snapshot.snapshot_table import SnapshotTable
@@ -33,11 +33,12 @@ _XL_VALIDATE_INPUT_ONLY = 0
 
 
 class PriceUpdateScope(StrEnum):
-    ALL = auto()       # all active positions (determined by the Position being non-blank)
-    SELECTED = auto()  # rows intersecting the current Excel selection
-    VISIBLE = auto()   # rows not hidden by an active filter
+    ALL = auto()  # all active positions (as determined by the Position being non-blank)
+    SELECTED = auto()  # rows intersecting the current Excel selection & Symbol column
+    VISIBLE = auto()  # rows not hidden by an active filter
 
 
+# region helpers
 def _extract_base_symbol(snapshot_symbol: str) -> str:
     """
     Examples:
@@ -68,25 +69,26 @@ def _set_dv_message(rng, title: str, message: str) -> None:
         logger.warning(f"Could not set DV message on range: {e}")
 
 
+# endregion
+
+
 class PriceUpdater:
     """
     Writes current market prices into the Last Price column using the injected PriceFetcher.
     The scope parameter controls which rows (Symbols) are targeted. See PriceUpdateScope
     """
 
-    POSITION_COLUMN = "Position"
     SYMBOL_COLUMN = "Symbol"
     LAST_PRICE_COLUMN = "Last Price"
+    POSITION_COLUMN = "Position"
     RUN_INFO_RANGE = "LastPriceRunInfo"
     DV_TITLE = "YFinance Pricing"
 
-    def __init__(self,
-                 snapshot: SnapshotTable,
-                 fetcher: PriceFetcher | None = None) -> None:
+    def __init__(self, snapshot: SnapshotTable, fetcher: PriceFetcher | None = None) -> None:
         self._snapshot = snapshot
         self._fetcher = fetcher or YFinanceFetcher()
 
-    def update_prices(self,scope: PriceUpdateScope = PriceUpdateScope.ALL) -> PriceUpdateResult:
+    def update_prices(self, scope: PriceUpdateScope = PriceUpdateScope.ALL) -> PriceUpdateResult:
         """
         Fetch and write current prices for snapshot rows in the given scope.
 
@@ -187,17 +189,45 @@ class PriceUpdater:
 
     def _visible_rows(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Return those rows which are not hidden by an active filter. Checks each row's
-        Hidden state via COM rather than using SpecialCells, which can
-        raise when no cells match or when there is no active filter.
+        Return those rows which are not hidden by an active filter.
+
+        Uses SpecialCells(xlCellTypeVisible) on the Symbol column to get
+        the visible rows as Excel itself computes them. Requires the filter
+        to be active — if no filter is applied, all rows are returned.
         """
+        _XL_CELL_TYPE_VISIBLE = 12
+
         try:
+            symbol_col_index = df.columns.get_loc(self.SYMBOL_COLUMN)
             data_body = self._snapshot.table.data_body_range
-            visible_positions = [
-                i for i in range(len(df))
-                if not data_body.rows[i].api.EntireRow.Hidden
-            ]
-            return df.iloc[visible_positions]
+            first_data_row = data_body.row
+            table_row_count = data_body.shape[0]  # excludes the totals-row
+            last_data_row = first_data_row + table_row_count - 1
+            # 1-based worksheet column number for the Symbol column
+            symbol_ws_col = data_body.column + symbol_col_index
+
+            sheet = self._snapshot.sheet
+            symbol_range = sheet.range(
+                (first_data_row, symbol_ws_col),
+                (last_data_row, symbol_ws_col)
+            )
+
+            try:
+                visible_range = symbol_range.api.SpecialCells(_XL_CELL_TYPE_VISIBLE)
+                visible_ws_rows = set()
+                for area in visible_range.Areas:
+                    for r in range(area.Row, area.Row + area.Rows.Count):
+                        visible_ws_rows.add(r)
+
+                visible_positions = [
+                    i for i in range(len(df))
+                    if (first_data_row + i) in visible_ws_rows
+                ]
+                return df.iloc[visible_positions]
+
+            except Exception:
+                logger.info("SpecialCells returned no visible rows")
+                return df.iloc[0:0]
 
         except Exception as e:
             logger.error(f"Could not determine visible rows - falling back to ALL: {e}")
@@ -206,8 +236,15 @@ class PriceUpdater:
     def _flag_failed_rows(self, ticker: str, indices: list) -> None:
         """Set a DV error message on each Last Price cell for a failed ticker."""
         col_index = self._snapshot.df.columns.get_loc(self.LAST_PRICE_COLUMN)
+        table_row_count = self._snapshot.table.data_body_range.shape[0]
         for idx in indices:
             row_position = self._snapshot.df.index.get_loc(idx)
+            if row_position >= table_row_count:
+                logger.warning(
+                    f"Skipping DV flag for {ticker} at position {row_position} "
+                    f"- outside table data body range ({table_row_count} rows)"
+                )
+                continue
             cell = self._snapshot.table.data_body_range[row_position, col_index]
             _set_dv_message(cell, self.DV_TITLE, f"⚠ No price available for {ticker}")
 

@@ -1,6 +1,7 @@
 import pytest
 
 from ebf_data.excel.snapshot.snapshot_table import SnapshotTable
+from ebf_data.excel.snapshot.price_updater import PriceUpdater
 
 
 class TestSnapshotTable:
@@ -37,3 +38,7 @@ class TestSnapshotTable:
             assigned = sut.get_assigned_short_calls()
 
             assert assigned.empty
+
+    class TestPricing:
+        def test_can_get_pricing(self, sut: SnapshotTable):
+            PriceUpdater(sut).update_prices()
