@@ -23,6 +23,7 @@ from enum import StrEnum, auto
 import pandas as pd
 from ebf_core.date_time.formatting import get_formatted_datetime, get_formatted_time_no_tz
 
+from ebf_data.excel.infrastructure.table_helpers import get_data_body_column
 from ebf_data.excel.pricing.price_fetcher import PriceFetcher, PriceUpdateResult
 from ebf_data.excel.pricing.yfinance_fetcher import YFinanceFetcher
 from ebf_data.excel.snapshot.snapshot_table import SnapshotTable
@@ -188,50 +189,39 @@ class PriceUpdater:
             return df[df[self.POSITION_COLUMN].notna() & (df[self.POSITION_COLUMN] != "")]
 
     def _visible_rows(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Return those rows which are not hidden by an active filter.
-
-        Uses SpecialCells(xlCellTypeVisible) on the Symbol column to get
-        the visible rows as Excel itself computes them. Requires the filter
-        to be active — if no filter is applied, all rows are returned.
-        """
+        """Return rows that are not hidden by an active filter."""
         _XL_CELL_TYPE_VISIBLE = 12
 
         try:
-            symbol_col_index = df.columns.get_loc(self.SYMBOL_COLUMN)
-            data_body = self._snapshot.table.data_body_range
-            first_data_row = data_body.row
-            table_row_count = data_body.shape[0]  # excludes the totals-row
-            last_data_row = first_data_row + table_row_count - 1
-            # 1-based worksheet column number for the Symbol column
-            symbol_ws_col = data_body.column + symbol_col_index
-
-            sheet = self._snapshot.sheet
-            symbol_range = sheet.range(
-                (first_data_row, symbol_ws_col),
-                (last_data_row, symbol_ws_col)
+            symbol_ws_col = get_data_body_column(
+                self._snapshot.table.data_body_range, df, self.SYMBOL_COLUMN
             )
 
-            try:
-                visible_range = symbol_range.api.SpecialCells(_XL_CELL_TYPE_VISIBLE)
-                visible_ws_rows = set()
-                for area in visible_range.Areas:
-                    for r in range(area.Row, area.Row + area.Rows.Count):
-                        visible_ws_rows.add(r)
+            data_body = self._snapshot.table.data_body_range
+            first = data_body.row
+            last = first + data_body.shape[0] - 1
 
-                visible_positions = [
-                    i for i in range(len(df))
-                    if (first_data_row + i) in visible_ws_rows
-                ]
-                return df.iloc[visible_positions]
+            symbol_range = self._snapshot.sheet.range(
+                (first, symbol_ws_col), (last, symbol_ws_col)
+            )
 
-            except Exception:
-                logger.info("SpecialCells returned no visible rows")
-                return df.iloc[0:0]
+            visible_range = symbol_range.api.SpecialCells(_XL_CELL_TYPE_VISIBLE)
 
-        except Exception as e:
-            logger.error(f"Could not determine visible rows - falling back to ALL: {e}")
-            return df[df[self.POSITION_COLUMN].notna() & (df[self.POSITION_COLUMN] != "")]
+            visible_ws_rows = {
+                r
+                for area in visible_range.Areas
+                for r in range(area.Row, area.Row + area.Rows.Count)
+            }
+
+            visible_positions = [
+                i for i in range(len(df)) if first + i in visible_ws_rows
+            ]
+            return df.iloc[visible_positions]
+
+        except Exception:  # noqa: broad-except
+            # SpecialCells raises when no rows are visible or no filter is active
+            logger.info("No visible rows (or no filter active)")
+            return df.iloc[:0]
 
     def _flag_failed_rows(self, ticker: str, indices: list) -> None:
         """Set a DV error message on each Last Price cell for a failed ticker."""
