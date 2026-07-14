@@ -228,7 +228,7 @@ class PriceUpdater:
         col_index = self._snapshot.df.columns.get_loc(self.LAST_PRICE_COLUMN)
         table_row_count = self._snapshot.table.data_body_range.shape[0]
         for idx in indices:
-            row_position = self._snapshot.df.index.get_loc(idx)
+            row_position: int = self._snapshot.df.index.get_loc(idx)
             if row_position >= table_row_count:
                 logger.warning(
                     f"Skipping DV flag for {ticker} at position {row_position} "

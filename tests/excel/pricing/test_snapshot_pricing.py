@@ -48,14 +48,14 @@ class TestSnapshotPricingTable:
             assert "SC Intrinsic Value" in headers
             assert "GUID Lookup" in headers
 
-    class TestRealPriceUpdate:
+    class TestPriceUpdater:
         """
         Hits real yFinance. Slow, requires network. This is the test
         that actually proves the full pipeline works.
         """
 
         @pytest.fixture(scope="class")
-        def updated_sut(self, sut: SnapshotScenarioTable):
+        def updated_sut(self, sut: SnapshotScenarioTable) -> tuple[SnapshotScenarioTable, PriceUpdateResult]:
             """
             Run update_prices() once for the whole class. Returns a tuple of
             (table, result) so benchmark and correctness tests share the same run.
@@ -76,7 +76,7 @@ class TestSnapshotPricingTable:
                 assert price is not None, f"{symbol}: Last Price is None after update"
                 assert float(price) > 0, f"{symbol}: Last Price {price} is not positive"
 
-        def test_prices_differ_from_scenario_static_values(self, updated_sut):
+        def test_prices_differ_from_initial_scenario_static_values(self, updated_sut):
             """
             Prices should differ from the static values saved in the scenario
             workbook - confirms update_prices() actually wrote new values
@@ -104,7 +104,7 @@ class TestSnapshotPricingTable:
                 f"update_prices() may not have written correctly"
             )
 
-        def test_run_info_dv_message_was_written(self, updated_sut):
+        def test_summary_run_info_message_was_written(self, updated_sut):
             """Confirm the LastPriceRunInfo named range has a DV message after the run."""
             sut, _ = updated_sut
             try:
