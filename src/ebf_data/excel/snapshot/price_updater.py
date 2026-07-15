@@ -1,19 +1,5 @@
 """
 Price updater for snapshot positions.
-
-Reads rows from SnapshotTable according to the requested scope,
-extracts unique base symbols, delegates price fetching to an injected
-PriceFetcher, and writes Last Price back to each matching row.
-
-Symbols with non-standard suffixes (e.g., CCJ_17, MARA_4.1) are
-reduced to their base ticker (everything before the first '_') for
-fetching, then matched back to all rows sharing that ticker.
-
-After each run:
-- The named range LastPriceRunInfo receives a DV input message
-  summarizing the run (symbol count plus timestamp).
-- Any Last Price cell whose symbol failed to price receives its own
-  DV input message flagging the specific failure.
 """
 import logging
 import time
@@ -42,10 +28,7 @@ class PriceUpdateScope(StrEnum):
 # region helpers
 def _extract_base_symbol(snapshot_symbol: str) -> str:
     """
-    Examples:
-        'BA'       -> 'BA'
-        'CCJ_17'   -> 'CCJ'
-        'MARA_4.1' -> 'MARA'
+    Some symbols may have non-standard suffixes (e.g., CCJ_17, MARA_4.1).
     """
     return snapshot_symbol.split("_")[0]
 
@@ -101,13 +84,13 @@ class PriceUpdater:
         self._snapshot.refresh()
         df = self._snapshot.df
 
-        target = self._select_rows(df, scope)
+        target = self._get_rows(df, scope)
         if target.empty:
             logger.info(f"No rows to update for scope={scope}")
             result.elapsed_seconds = time.monotonic() - start
             return result
 
-        ticker_to_indices: dict[str, list] = {}
+        ticker_to_indices: dict[str, list[int]] = {}
         for idx, row in target.iterrows():
             ticker = _extract_base_symbol(str(row[self.SYMBOL_COLUMN]))
             ticker_to_indices.setdefault(ticker, []).append(idx)
@@ -142,20 +125,24 @@ class PriceUpdater:
 
         return result
 
-    def _select_rows(self, df: pd.DataFrame, scope: PriceUpdateScope) -> pd.DataFrame:
+    def _get_rows(self, df: pd.DataFrame, scope: PriceUpdateScope) -> pd.DataFrame:
         """Return the subset of df rows to update for the given scope."""
         if scope == PriceUpdateScope.ALL:
-            return df[df[self.POSITION_COLUMN].notna() & (df[self.POSITION_COLUMN] != "")]
+            return self._get_all_rows(df)
 
         if scope == PriceUpdateScope.SELECTED:
-            return self._rows_in_selection(df)
+            return self._get_selected_rows(df)
 
         if scope == PriceUpdateScope.VISIBLE:
-            return self._visible_rows(df)
+            return self._get_visible_rows(df)
 
         return df.iloc[0:0]  # empty - unknown scope
 
-    def _rows_in_selection(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _get_all_rows(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Return rows with non-blank Position."""
+        return df[df[self.POSITION_COLUMN].notna() & (df[self.POSITION_COLUMN] != "")]
+
+    def _get_selected_rows(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Return rows whose position in the table intersects the current
         Excel selection. Uses Application.Intersect against the Symbol
@@ -188,7 +175,7 @@ class PriceUpdater:
             logger.error(f"Could not determine selection - falling back to ALL: {e}")
             return df[df[self.POSITION_COLUMN].notna() & (df[self.POSITION_COLUMN] != "")]
 
-    def _visible_rows(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _get_visible_rows(self, df: pd.DataFrame) -> pd.DataFrame:
         """Return rows that are not hidden by an active filter."""
         _XL_CELL_TYPE_VISIBLE = 12
 
@@ -223,7 +210,7 @@ class PriceUpdater:
             logger.info("No visible rows (or no filter active)")
             return df.iloc[:0]
 
-    def _flag_failed_rows(self, ticker: str, indices: list) -> None:
+    def _flag_failed_rows(self, ticker: str, indices: list[int]) -> None:
         """Set a DV error message on each Last Price cell for a failed ticker."""
         col_index = self._snapshot.df.columns.get_loc(self.LAST_PRICE_COLUMN)
         table_row_count = self._snapshot.table.data_body_range.shape[0]

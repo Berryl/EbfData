@@ -3,7 +3,8 @@ from xlwings import Range
 
 def get_data_body_column(db_range: Range, df: pd.DataFrame, column_name: str) -> int:
     """
-    Return the 1-based worksheet column number for a column inside the table's data body range.
+    Return the worksheet column number for a column inside the table's data body range.
+    Excel column numbers are 1-based.
     """
     try:
         col_index = df.columns.get_loc(column_name)

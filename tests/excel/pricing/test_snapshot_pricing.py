@@ -129,7 +129,7 @@ class TestSnapshotPricingTable:
             """
             _, result = updated_sut
 
-            MAX_SECONDS_PER_SYMBOL = 3.0  # generous - tighten after baselining
+            MAX_SECONDS_PER_SYMBOL = 3.0  # generous - tighten after base-lining
 
             print(f"\n--- Price Update Benchmark ---")
             print(f"  Symbols fetched : {result.total_symbols}")
@@ -236,6 +236,114 @@ class TestSnapshotPricingTable:
                 )
             except Exception as e:
                 pytest.fail(f"Could not read LastPriceRunInfo DV message: {e}")
+
+    class TestSelectedPriceUpdate:
+        """
+        Tests update_prices(scope=SELECTED) against the scenario workbook.
+
+        The fixture programmatically selects known Symbol cells before
+        invoking update_prices(), simulating the trader selecting one or
+        more rows in Excel before triggering a price update.
+
+        The scenario workbook is filtered (11 visible rows), so non-contiguous
+        selections produce multi-area ranges - exercising the Areas loop in
+        _rows_in_selection.
+        """
+
+        # Worksheet constants derived from the scenario workbook layout.
+        # Symbol is column B (col 2); row numbers are worksheet rows.
+        SYMBOL_WS_COL = 2
+        BA_WS_ROW = 161
+        CCJ_WS_ROW = 166
+
+        def _select_ws_rows(self, sut: SnapshotScenarioTable, ws_rows: list[int]) -> None:
+            sheet = sut.sheet.activate()
+            first = sheet.range((ws_rows[0], self.SYMBOL_WS_COL))
+            if len(ws_rows) == 1:
+                first.select()
+                return
+            union = first.api
+            for r in ws_rows[1:]:
+                union = sheet.api.Application.Union(union, sheet.range((r, self.SYMBOL_WS_COL)).api)
+            union.Select()
+
+        @pytest.fixture(scope="class")
+        def single_row_result(self, sut: SnapshotScenarioTable) -> tuple[SnapshotScenarioTable, PriceUpdateResult]:
+            """Select BA only, run the SELECTED scope."""
+            self._select_ws_rows(sut, [self.BA_WS_ROW])
+            result: PriceUpdateResult = PriceUpdater(sut).update_prices(scope=PriceUpdateScope.SELECTED)
+            sut.refresh()
+            return sut, result
+
+        @pytest.fixture(scope="class")
+        def two_row_result(self, sut: SnapshotScenarioTable) -> tuple[SnapshotScenarioTable, PriceUpdateResult]:
+            """Select BA + CCJ_17 (non-contiguous in worksheet), run SELECTED scope."""
+            self._select_ws_rows(sut, [self.BA_WS_ROW, self.CCJ_WS_ROW])
+            result: PriceUpdateResult = PriceUpdater(sut).update_prices(scope=PriceUpdateScope.SELECTED)
+            sut.refresh()
+            return sut, result
+
+        class TestWhenSingleSymbolSelected:
+
+            def test_symbol_count_is_1(self, single_row_result):
+                """Only BA selected - exactly one unique ticker fetched."""
+                _, result = single_row_result
+                assert result.total_symbols == 1, f"Expected 1 symbol, got {result.total_symbols}"
+
+            def test_row_is_updated(self, single_row_result):
+                """BA maps to one row - exactly one row written."""
+                _, result = single_row_result
+                assert result.updated == 1, f"Expected 1 row updated, got {result.updated}"
+
+            def test_no_failures(self, single_row_result):
+                _, result = single_row_result
+                assert result.failed == []
+
+            def test_updated_price_is_positive(self, single_row_result):
+                sut, _ = single_row_result
+                df = sut.df
+                ba_rows = df[df["Symbol"] == "BA"]
+                assert not ba_rows.empty
+                price = float(ba_rows.iloc[0]["Last Price"])
+                assert price > 0, f"BA Last Price is not positive: {price}"
+
+        class TestWhenTwoConsecutiveSymbolsSelected:
+
+            def test_symbol_count_is_2(self, two_row_result):
+                """BA + CCJ_17 selected - two unique tickers (BA, CCJ)."""
+                _, result = two_row_result
+                assert result.total_symbols == 2, (
+                    f"Expected 2 symbols, got {result.total_symbols}"
+                )
+
+            def test_rows_are_updated(self, two_row_result):
+                """BA and CCJ_17 each map to one row - two rows written."""
+                _, result = two_row_result
+                assert result.updated == 2, f"Expected 2 rows updated, got {result.updated}"
+
+            def test_no_failures(self, two_row_result):
+                _, result = two_row_result
+                assert result.failed == []
+
+            def test_updated_prices_are_positive(self, two_row_result):
+                sut, _ = two_row_result
+                df = sut.df
+                for symbol in ("BA", "CCJ_17"):
+                    rows = df[df["Symbol"] == symbol]
+                    assert not rows.empty, f"{symbol} not found in df"
+                    price = float(rows.iloc[0]["Last Price"])
+                    assert price > 0, f"{symbol} Last Price is not positive: {price}"
+
+            def test_run_info_scope_label_states_selected(self, two_row_result):
+                """DV summary message should record that the SELECTED scope was used."""
+                sut, _ = two_row_result
+                try:
+                    run_info = sut.book.names["LastPriceRunInfo"].refers_to_range
+                    message = run_info.api.Validation.InputMessage or ""
+                    assert "selected" in message.lower(), f"Expected 'selected' in run summary message, got: {message!r}"
+                except Exception as e:
+                    pytest.fail(f"Could not read LastPriceRunInfo DV message: {e}")
+
 
     class TestMockedPriceUpdate:
         """
