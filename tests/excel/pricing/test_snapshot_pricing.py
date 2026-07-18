@@ -117,34 +117,30 @@ class TestSnapshotPricingTable:
                 pytest.fail(f"Could not read LastPriceRunInfo DV message: {e}")
 
         def test_performance_benchmark(self, updated_sut):
-            """
-            Performance benchmark for update_prices(). Records elapsed time,
-            symbol count, and per-symbol rate. Fails if the run took longer
-            than a generous ceiling - meant to catch pathological regressions
-            (e.g., falling back to the download path for every symbol) rather
-            than enforce strict SLAs.
-
-            Update MAX_SECONDS_PER_SYMBOL after a few real runs to reflect
-            your actual baseline.
-            """
             _, result = updated_sut
 
-            MAX_SECONDS_PER_SYMBOL = 3.0  # generous - tighten after base-lining
+            MAX_SECONDS_PER_SYMBOL = 2.0
 
             print(f"\n--- Price Update Benchmark ---")
             print(f"  Symbols fetched : {result.total_symbols}")
-            print(f"  Updated         : {result.updated_rows}")
+            print(f"  Updated         : {result.updated_symbols}")
             print(f"  Failed          : {len(result.failed)} {result.failed or ''}")
-            print(f"  Elapsed         : {result.elapsed_seconds:.2f}s")
+            print(f"  Total Elapsed   : {result.total_time:.2f}s")
             if result.total_symbols:
-                print(f"  Per symbol      : {result.elapsed_seconds / result.total_symbols:.2f}s")
+                print(f"  Per symbol  : {result.total_time / result.total_symbols:.2f}s")
             print(f"  Success rate    : {result.success_rate:.0%}")
+            print()
+            print(f"\n--- Benchmark Breakdowns By: ---")
+            print(f"Price fetching : {result.price_fetching_time:.2f}s "
+                  f"({result.price_fetching_time / result.total_time * 100:.1f}% of total)")
+            print(f"Excel updates  : {result.excel_updating_time:.2f}s "
+                  f"({result.excel_updating_time / result.total_time * 100:.1f}% of total)")
 
             assert result.total_symbols > 0, "No symbols were processed"
-            assert result.elapsed_seconds < result.total_symbols * MAX_SECONDS_PER_SYMBOL, (
-                f"update_prices() took {result.elapsed_seconds:.1f}s for "
+            assert result.total_time < result.total_symbols * MAX_SECONDS_PER_SYMBOL, (
+                f"update_prices() took {result.total_time:.1f}s for "
                 f"{result.total_symbols} symbols "
-                f"({result.elapsed_seconds / result.total_symbols:.1f}s/symbol) - "
+                f"({result.total_time / result.total_symbols:.1f}s/symbol) - "
                 f"expected under {MAX_SECONDS_PER_SYMBOL}s/symbol. "
                 f"Is the fallback download path firing?"
             )
@@ -216,12 +212,12 @@ class TestSnapshotPricingTable:
             print(f"\n--- Visible Scope Benchmark ---")
             print(f"  Symbols fetched : {result.total_symbols}")
             print(f"  Updated         : {result.updated_rows}")
-            print(f"  Elapsed         : {result.elapsed_seconds:.2f}s")
+            print(f"  Elapsed         : {result.total_time:.2f}s")
             if result.total_symbols:
-                print(f"  Per symbol      : {result.elapsed_seconds / result.total_symbols:.2f}s")
+                print(f"  Per symbol      : {result.total_time / result.total_symbols:.2f}s")
 
-            assert result.elapsed_seconds < ALL_BASELINE_SECONDS, (
-                f"VISIBLE update took {result.elapsed_seconds:.1f}s - "
+            assert result.total_time < ALL_BASELINE_SECONDS, (
+                f"VISIBLE update took {result.total_time:.1f}s - "
                 f"expected under ALL baseline of {ALL_BASELINE_SECONDS}s"
             )
 

@@ -25,7 +25,9 @@ class PriceUpdateResult:
     total_symbols: int = 0
     updated_rows: int = 0
     failed: list[str] = field(default_factory=list)
-    elapsed_seconds: float = 0.0
+    price_fetching_time: float = 0.0
+    excel_updating_time: float = 0.0
+    total_time: float = 0.0
 
     @property
     def updated_symbols(self) -> int:
@@ -35,4 +37,4 @@ class PriceUpdateResult:
     def success_rate(self) -> float:
         if self.total_symbols == 0:
             return 0.0
-        return self.updated_rows / self.total_symbols
+        return self.updated_symbols / self.total_symbols

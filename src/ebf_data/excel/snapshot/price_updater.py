@@ -75,10 +75,8 @@ class PriceUpdater:
     def update_prices(self, scope: PriceUpdateScope = PriceUpdateScope.ALL) -> PriceUpdateResult:
         """
         Fetch and write current prices for snapshot rows in the given scope.
-
-        Returns a PriceUpdateResult with symbol counts, failure list, and elapsed time.
         """
-        start = time.monotonic()
+        t0 = time.monotonic()
         result = PriceUpdateResult()
 
         self._snapshot.refresh()
@@ -87,7 +85,7 @@ class PriceUpdater:
         target = self._get_rows(df, scope)
         if target.empty:
             logger.info(f"No rows to update for scope={scope}")
-            result.elapsed_seconds = time.monotonic() - start
+            result.total_time = time.monotonic() - t0
             return result
 
         ticker_to_indices: dict[str, list[int]] = {}
@@ -99,9 +97,19 @@ class PriceUpdater:
         result.total_symbols = len(tickers)
         logger.info(f"Fetching prices for {len(tickers)} symbol(s) [{scope}]: {tickers}")
 
+        t1 = time.monotonic()
         prices = self._fetcher.fetch_prices(tickers)
+        result.price_fetching_time = time.monotonic() - t1
 
         failed_tickers: list[str] = []
+
+        t2 = time.monotonic()
+        last_price_col_index = self._snapshot.df.columns.get_loc(self.LAST_PRICE_COLUMN)
+        data_body = self._snapshot.table.data_body_range
+        table_row_count = data_body.shape[0]
+
+        # Read the full Last Price column once, patch known positions, write back in one shot.
+        last_price_values: list[list] = data_body.columns[last_price_col_index].value
 
         for ticker, indices in ticker_to_indices.items():
             price = prices.get(ticker)
@@ -111,13 +119,28 @@ class PriceUpdater:
                 self._flag_failed_rows(ticker, indices)
                 continue
             for idx in indices:
-                self._snapshot.update_row(idx, {self.LAST_PRICE_COLUMN: price})
+                row_position: int = self._snapshot.df.index.get_loc(idx)
+                if row_position >= table_row_count:
+                    logger.warning(f"Skipping write for {ticker} at position {row_position} - outside data body range")
+                    continue
+                last_price_values[row_position] = price
                 result.updated_rows += 1
 
+        app = self._snapshot.book.app
+        app.screen_updating = False
+        app.calculation = "manual"
+        try:
+            data_body.columns[last_price_col_index].value = last_price_values
+        finally:
+            app.calculation = "automatic"
+            app.screen_updating = True
+
+        result.excel_updating_time = time.monotonic() - t2
+
         result.failed = failed_tickers
-        result.elapsed_seconds = time.monotonic() - start
 
         self._summarize_run(result, scope)
+        result.total_time = time.monotonic() - t0
 
         return result
 
@@ -238,7 +261,7 @@ class PriceUpdater:
             logger.info(
                 f"Updated Last Price for {result.updated_rows} row(s) across "
                 f"{result.updated_symbols} of {result.total_symbols} symbol(s) "
-                f"in {result.elapsed_seconds:.1f}s"
+                f"in {result.total_time:.1f}s"
             )
 
         except Exception as e:
