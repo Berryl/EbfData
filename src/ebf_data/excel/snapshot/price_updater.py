@@ -117,11 +117,7 @@ class PriceUpdater:
         result.failed = failed_tickers
         result.elapsed_seconds = time.monotonic() - start
 
-        self._summarize_run(result.updated_rows, result.total_symbols, failed_tickers, scope)
-        logger.info(
-            f"Updated Last Price for {result.updated_rows} row(s) "
-            f"in {result.elapsed_seconds:.1f}s"
-        )
+        self._summarize_run(result, scope)
 
         return result
 
@@ -225,16 +221,27 @@ class PriceUpdater:
             cell = self._snapshot.table.data_body_range[row_position, col_index]
             _set_dv_message(cell, self.DV_TITLE, f"⚠ No price available for {ticker}")
 
-    def _summarize_run(self, updated: int, total: int,
-                       failed: list[str], scope: PriceUpdateScope) -> None:
-        """Write a run summary DV message to the LastPriceRunInfo named range."""
+    def _summarize_run(self, result: PriceUpdateResult, scope: PriceUpdateScope, ) -> None:
         try:
             run_info_range = self._snapshot.book.names[self.RUN_INFO_RANGE].refers_to_range
-            timestamp = get_formatted_datetime(datetime.now(), time_fmt=get_formatted_time_no_tz)
-            message = f"updated {updated} of {total} symbols [{scope}]\n{timestamp}"
-            if failed:
-                message += f"\nFailed: {', '.join(failed)}"
-            _set_dv_message(run_info_range, self.DV_TITLE, message)
-        except Exception as e:
-            logger.warning(f"Could not write run summary to {self.RUN_INFO_RANGE}: {e}")
+            timestamp = get_formatted_datetime(datetime.now(),time_fmt=get_formatted_time_no_tz,)
+            message = (
+                f"updated {result.updated_rows} rows across "
+                f"{result.updated_symbols} of {result.total_symbols} symbols "
+                f"[{scope}]\n{timestamp}"
+            )
+            if result.failed:
+                message += f"\nFailed: {', '.join(result.failed)}"
 
+            _set_dv_message(run_info_range, self.DV_TITLE, message)
+
+            logger.info(
+                f"Updated Last Price for {result.updated_rows} row(s) across "
+                f"{result.updated_symbols} of {result.total_symbols} symbol(s) "
+                f"in {result.elapsed_seconds:.1f}s"
+            )
+
+        except Exception as e:
+            logger.warning(
+                f"Could not write run summary to {self.RUN_INFO_RANGE}: {e}"
+            )
