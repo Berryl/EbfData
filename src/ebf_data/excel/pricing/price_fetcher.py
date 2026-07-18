@@ -23,12 +23,16 @@ class PriceFetcher(ABC):
 class PriceUpdateResult:
     """Summary of a single pricing run."""
     total_symbols: int = 0
-    updated: int = 0
+    updated_rows: int = 0
     failed: list[str] = field(default_factory=list)
     elapsed_seconds: float = 0.0
+
+    @property
+    def updated_symbols(self) -> int:
+        return self.total_symbols - len(self.failed)
 
     @property
     def success_rate(self) -> float:
         if self.total_symbols == 0:
             return 0.0
-        return self.updated / self.total_symbols
+        return self.updated_rows / self.total_symbols

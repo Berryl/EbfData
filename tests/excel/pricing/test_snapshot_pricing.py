@@ -133,7 +133,7 @@ class TestSnapshotPricingTable:
 
             print(f"\n--- Price Update Benchmark ---")
             print(f"  Symbols fetched : {result.total_symbols}")
-            print(f"  Updated         : {result.updated}")
+            print(f"  Updated         : {result.updated_rows}")
             print(f"  Failed          : {len(result.failed)} {result.failed or ''}")
             print(f"  Elapsed         : {result.elapsed_seconds:.2f}s")
             if result.total_symbols:
@@ -185,8 +185,8 @@ class TestSnapshotPricingTable:
                 f"Expected {self.VISIBLE_SYMBOL_COUNT} unique tickers, "
                 f"got {result.total_symbols} - VISIBLE scope may be falling back to ALL"
             )
-            assert result.updated == self.VISIBLE_ROW_COUNT, (
-                f"Expected {self.VISIBLE_ROW_COUNT} rows updated, got {result.updated}"
+            assert result.updated_rows == self.VISIBLE_ROW_COUNT, (
+                f"Expected {self.VISIBLE_ROW_COUNT} rows updated, got {result.updated_rows}"
             )
             assert result.failed == [], (
                 f"Expected no failures, got {result.failed}"
@@ -215,7 +215,7 @@ class TestSnapshotPricingTable:
 
             print(f"\n--- Visible Scope Benchmark ---")
             print(f"  Symbols fetched : {result.total_symbols}")
-            print(f"  Updated         : {result.updated}")
+            print(f"  Updated         : {result.updated_rows}")
             print(f"  Elapsed         : {result.elapsed_seconds:.2f}s")
             if result.total_symbols:
                 print(f"  Per symbol      : {result.elapsed_seconds / result.total_symbols:.2f}s")
@@ -293,7 +293,7 @@ class TestSnapshotPricingTable:
             def test_row_is_updated(self, single_row_result):
                 """BA maps to one row - exactly one row written."""
                 _, result = single_row_result
-                assert result.updated == 1, f"Expected 1 row updated, got {result.updated}"
+                assert result.updated_rows == 1, f"Expected 1 row updated, got {result.updated_rows}"
 
             def test_no_failures(self, single_row_result):
                 _, result = single_row_result
@@ -319,7 +319,7 @@ class TestSnapshotPricingTable:
             def test_rows_are_updated(self, two_row_result):
                 """BA and CCJ_17 each map to one row - two rows written."""
                 _, result = two_row_result
-                assert result.updated == 2, f"Expected 2 rows updated, got {result.updated}"
+                assert result.updated_rows == 2, f"Expected 2 rows updated, got {result.updated_rows}"
 
             def test_no_failures(self, two_row_result):
                 _, result = two_row_result

@@ -112,14 +112,14 @@ class PriceUpdater:
                 continue
             for idx in indices:
                 self._snapshot.update_row(idx, {self.LAST_PRICE_COLUMN: price})
-                result.updated += 1
+                result.updated_rows += 1
 
         result.failed = failed_tickers
         result.elapsed_seconds = time.monotonic() - start
 
-        self._write_run_summary(result.updated, result.total_symbols, failed_tickers, scope)
+        self._summarize_run(result.updated_rows, result.total_symbols, failed_tickers, scope)
         logger.info(
-            f"Updated Last Price for {result.updated} row(s) "
+            f"Updated Last Price for {result.updated_rows} row(s) "
             f"in {result.elapsed_seconds:.1f}s"
         )
 
@@ -225,8 +225,8 @@ class PriceUpdater:
             cell = self._snapshot.table.data_body_range[row_position, col_index]
             _set_dv_message(cell, self.DV_TITLE, f"⚠ No price available for {ticker}")
 
-    def _write_run_summary(self, updated: int, total: int,
-                           failed: list[str], scope: PriceUpdateScope) -> None:
+    def _summarize_run(self, updated: int, total: int,
+                       failed: list[str], scope: PriceUpdateScope) -> None:
         """Write a run summary DV message to the LastPriceRunInfo named range."""
         try:
             run_info_range = self._snapshot.book.names[self.RUN_INFO_RANGE].refers_to_range
@@ -237,3 +237,4 @@ class PriceUpdater:
             _set_dv_message(run_info_range, self.DV_TITLE, message)
         except Exception as e:
             logger.warning(f"Could not write run summary to {self.RUN_INFO_RANGE}: {e}")
+
