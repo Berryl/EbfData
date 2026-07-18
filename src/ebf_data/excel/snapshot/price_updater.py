@@ -13,6 +13,7 @@ from ebf_data.excel.infrastructure.table_helpers import get_data_body_column
 from ebf_data.excel.pricing.price_fetcher import PriceFetcher, PriceUpdateResult
 from ebf_data.excel.pricing.yfinance_fetcher import YFinanceFetcher
 from ebf_data.excel.snapshot.snapshot_table import SnapshotTable
+from ebf_data.excel.infrastructure.suspend_app_updates import SuspendAppUpdates
 
 logger = logging.getLogger(__name__)
 
@@ -126,14 +127,8 @@ class PriceUpdater:
                 last_price_values[row_position] = price
                 result.updated_rows += 1
 
-        app = self._snapshot.book.app
-        app.screen_updating = False
-        app.calculation = "manual"
-        try:
+        with SuspendAppUpdates(self._snapshot.book.app):
             data_body.columns[last_price_col_index].value = last_price_values
-        finally:
-            app.calculation = "automatic"
-            app.screen_updating = True
 
         result.excel_updating_time = time.monotonic() - t2
 
@@ -247,7 +242,7 @@ class PriceUpdater:
     def _summarize_run(self, result: PriceUpdateResult, scope: PriceUpdateScope, ) -> None:
         try:
             run_info_range = self._snapshot.book.names[self.RUN_INFO_RANGE].refers_to_range
-            timestamp = get_formatted_datetime(datetime.now(),time_fmt=get_formatted_time_no_tz,)
+            timestamp = get_formatted_datetime(datetime.now(), time_fmt=get_formatted_time_no_tz, )
             message = (
                 f"updated {result.updated_rows} rows across "
                 f"{result.updated_symbols} of {result.total_symbols} symbols "
