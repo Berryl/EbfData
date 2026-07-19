@@ -107,16 +107,15 @@ class PriceUpdater:
         t2 = time.monotonic()
         data_body = self._snapshot.table.data_body_range
         table_row_count = data_body.shape[0]
-        last_price_col_index = df.columns.get_loc(self.LAST_PRICE_COLUMN)
         last_price_ws_col = get_data_body_column(data_body, df, self.LAST_PRICE_COLUMN)
 
         # Read the full Last Price column once
         first_row = data_body.row
-        target_range = self._snapshot.sheet.range(
+        last_price_range = self._snapshot.sheet.range(
             (first_row, last_price_ws_col),
             (first_row + table_row_count - 1, last_price_ws_col)
         )
-        last_price_values: list = target_range.value
+        last_price_values: list = last_price_range.value
 
         for ticker, indices in ticker_to_indices.items():
             price = prices.get(ticker)
@@ -137,7 +136,7 @@ class PriceUpdater:
                 result.updated_rows += 1
 
         with SuspendAppUpdates(self._snapshot.book.app):
-            target_range.value = [[v] for v in last_price_values]
+            last_price_range.value = [[v] for v in last_price_values]
 
         result.excel_updating_time = time.monotonic() - t2
         result.failed = failed_tickers
