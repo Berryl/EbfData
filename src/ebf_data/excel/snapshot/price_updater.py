@@ -9,11 +9,11 @@ from enum import StrEnum, auto
 import pandas as pd
 from ebf_core.date_time.formatting import get_formatted_datetime, get_formatted_time_no_tz
 
+from ebf_data.excel.infrastructure.suspend_app_updates import SuspendAppUpdates
 from ebf_data.excel.infrastructure.table_helpers import get_data_body_column
 from ebf_data.excel.pricing.price_fetcher import PriceFetcher, PriceUpdateResult
 from ebf_data.excel.pricing.yfinance_fetcher import YFinanceFetcher
 from ebf_data.excel.snapshot.snapshot_table import SnapshotTable
-from ebf_data.excel.infrastructure.suspend_app_updates import SuspendAppUpdates
 
 logger = logging.getLogger(__name__)
 
@@ -105,12 +105,18 @@ class PriceUpdater:
         failed_tickers: list[str] = []
 
         t2 = time.monotonic()
-        last_price_col_index = self._snapshot.df.columns.get_loc(self.LAST_PRICE_COLUMN)
         data_body = self._snapshot.table.data_body_range
         table_row_count = data_body.shape[0]
+        last_price_col_index = df.columns.get_loc(self.LAST_PRICE_COLUMN)
+        last_price_ws_col = get_data_body_column(data_body, df, self.LAST_PRICE_COLUMN)
 
-        # Read the full Last Price column once, patch known positions, write back in one shot.
-        last_price_values: list[list] = data_body.columns[last_price_col_index].value
+        # Read the full Last Price column once
+        first_row = data_body.row
+        target_range = self._snapshot.sheet.range(
+            (first_row, last_price_ws_col),
+            (first_row + table_row_count - 1, last_price_ws_col)
+        )
+        last_price_values: list = target_range.value
 
         for ticker, indices in ticker_to_indices.items():
             price = prices.get(ticker)
@@ -120,18 +126,20 @@ class PriceUpdater:
                 self._flag_failed_rows(ticker, indices)
                 continue
             for idx in indices:
-                row_position: int = self._snapshot.df.index.get_loc(idx)
+                row_position: int = df.index.get_loc(idx)
                 if row_position >= table_row_count:
-                    logger.warning(f"Skipping write for {ticker} at position {row_position} - outside data body range")
+                    logger.warning(
+                        f"Skipping write for {ticker} at position {row_position} "
+                        f"- outside data body range"
+                    )
                     continue
                 last_price_values[row_position] = price
                 result.updated_rows += 1
 
         with SuspendAppUpdates(self._snapshot.book.app):
-            data_body.columns[last_price_col_index].value = last_price_values
+            target_range.value = [[v] for v in last_price_values]
 
         result.excel_updating_time = time.monotonic() - t2
-
         result.failed = failed_tickers
 
         self._summarize_run(result, scope)

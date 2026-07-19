@@ -4,12 +4,7 @@ from ebf_data.excel.snapshot.snapshot_table import SnapshotTable
 
 def main() -> None:
     updater = PriceUpdater(SnapshotTable())
-    result = updater.update_prices()
-
-    if result.failed:
-        raise RuntimeError(
-            f"Price update completed with failures: {', '.join(result.failed)}"
-        )
+    updater.update_prices()
 
 
 if __name__ == "__main__":
