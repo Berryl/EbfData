@@ -100,16 +100,17 @@ class PriceUpdater:
 
         t1 = time.monotonic()
         prices = self._fetcher.fetch_prices(tickers)
+        print(f"DEBUG prices: {prices}")
         result.price_fetching_time = time.monotonic() - t1
 
         failed_tickers: list[str] = []
+        failures_to_flag: list[tuple[str, list[int]]] = []
 
         t2 = time.monotonic()
         data_body = self._snapshot.table.data_body_range
         table_row_count = data_body.shape[0]
         last_price_ws_col = get_data_body_column(data_body, df, self.LAST_PRICE_COLUMN)
 
-        # Read the full Last Price column once
         first_row = data_body.row
         last_price_range = self._snapshot.sheet.range(
             (first_row, last_price_ws_col),
@@ -117,12 +118,14 @@ class PriceUpdater:
         )
         last_price_values: list = last_price_range.value
 
+        print(f"DEBUG last_price_values[:5]: {last_price_values[:5]}")
+
         for ticker, indices in ticker_to_indices.items():
             price = prices.get(ticker)
             if price is None:
                 logger.warning(f"No price available for {ticker} - Last Price unchanged")
                 failed_tickers.append(ticker)
-                self._flag_failed_rows(ticker, indices)
+                failures_to_flag.append((ticker, indices))
                 continue
             for idx in indices:
                 row_position: int = df.index.get_loc(idx)
@@ -137,6 +140,9 @@ class PriceUpdater:
 
         with SuspendAppUpdates(self._snapshot.book.app):
             last_price_range.value = [[v] for v in last_price_values]
+
+        for ticker, indices in failures_to_flag:
+            self._flag_failed_rows(ticker, indices, df)
 
         result.excel_updating_time = time.monotonic() - t2
         result.failed = failed_tickers
@@ -231,12 +237,12 @@ class PriceUpdater:
             logger.info("No visible rows (or no filter active)")
             return df.iloc[:0]
 
-    def _flag_failed_rows(self, ticker: str, indices: list[int]) -> None:
+    def _flag_failed_rows(self, ticker: str, indices: list[int], df: pd.DataFrame) -> None:
         """Set a DV error message on each Last Price cell for a failed ticker."""
-        col_index = self._snapshot.df.columns.get_loc(self.LAST_PRICE_COLUMN)
+        col_index = df.columns.get_loc(self.LAST_PRICE_COLUMN)
         table_row_count = self._snapshot.table.data_body_range.shape[0]
         for idx in indices:
-            row_position: int = self._snapshot.df.index.get_loc(idx)
+            row_position: int = df.index.get_loc(idx)
             if row_position >= table_row_count:
                 logger.warning(
                     f"Skipping DV flag for {ticker} at position {row_position} "
