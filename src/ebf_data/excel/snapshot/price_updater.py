@@ -100,7 +100,6 @@ class PriceUpdater:
 
         t1 = time.monotonic()
         prices = self._fetcher.fetch_prices(tickers)
-        print(f"DEBUG prices: {prices}")
         result.price_fetching_time = time.monotonic() - t1
 
         failed_tickers: list[str] = []
@@ -117,8 +116,6 @@ class PriceUpdater:
             (first_row + table_row_count - 1, last_price_ws_col)
         )
         last_price_values: list = last_price_range.value
-
-        print(f"DEBUG last_price_values[:5]: {last_price_values[:5]}")
 
         for ticker, indices in ticker_to_indices.items():
             price = prices.get(ticker)
