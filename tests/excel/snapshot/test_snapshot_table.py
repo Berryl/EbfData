@@ -50,6 +50,6 @@ class TestSnapshotTable:
         def opu(self, sut) -> OptionPriceUpdater:
             return OptionPriceUpdater(sut)
 
-        @pytest.mark.skip(reason="stale test, needs to be updated")
+        # @pytest.mark.skip(reason="run on demand only")
         def test_can_get_short_call_pricing(self, opu):
             opu.update_short_call_prices()

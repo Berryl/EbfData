@@ -107,6 +107,8 @@ class OptionPriceUpdater:
 
         t1 = time.monotonic()
         prices = self._fetcher.fetch_ask_prices(contracts)
+        print(f"DEBUG prices: {prices}")
+
         result.price_fetching_time = time.monotonic() - t1
 
         failed_symbols: list[str] = []
@@ -125,6 +127,7 @@ class OptionPriceUpdater:
 
         for occ, indices in symbol_to_indices.items():
             ask = prices.get(occ)
+            print(f"DEBUG {occ}: ask={ask}, indices={indices}")
             if ask is None:
                 logger.warning(f"No ask price available for {occ} - {ask_column} unchanged")
                 failed_symbols.append(occ)
@@ -140,8 +143,15 @@ class OptionPriceUpdater:
                 ask_values[row_position] = ask
                 result.updated_rows += 1
 
+        print(f"DEBUG after loop - ask_values[159]={ask_values[159]}, ask_values[194]={ask_values[194]}")
+
         with SuspendAppUpdates(self._snapshot.book.app):
             ask_range.value = [[v] for v in ask_values]
+
+        print(f"DEBUG wrote {len(ask_values)} values to col={ask_ws_col}, first_row={first_row}")
+        print(
+            f"DEBUG sample written: ask_range[159].value={self._snapshot.sheet.range((first_row + 159, ask_ws_col)).value}")
+        print(f"DEBUG ask_range address: {ask_range.address}")
 
         result.excel_updating_time = time.monotonic() - t2
         result.failed = failed_symbols

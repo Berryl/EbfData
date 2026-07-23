@@ -10,7 +10,6 @@ in isolation, without network dependency. (placeholder for now)
 import pytest
 
 from ebf_data.excel.snapshot.price_updater import PriceUpdater, PriceUpdateResult, PriceUpdateScope
-from ebf_data.excel.snapshot.snapshot_table import SnapshotTable
 from tests.excel.pricing.pricing_scenarios import SnapshotScenario_ShortCalls, SnapshotScenario_WithBadSymbol
 
 # Symbols present in the scenario workbook's active rows.
@@ -56,7 +55,8 @@ class TestSnapshotPricingTable:
         """
 
         @pytest.fixture(scope="class")
-        def updated_sut(self, sut: SnapshotScenario_ShortCalls) -> tuple[SnapshotScenario_ShortCalls, PriceUpdateResult]:
+        def updated_sut(self, sut: SnapshotScenario_ShortCalls) -> tuple[
+            SnapshotScenario_ShortCalls, PriceUpdateResult]:
             """
             Run update_prices() once for the whole class. Returns a tuple of
             (table, result) so benchmark and correctness tests share the same run.
@@ -203,7 +203,7 @@ class TestSnapshotPricingTable:
         def test_visible_scope_faster_than_all(self, visible_result):
             """
             Fetching 11 symbols should complete faster than the ALL baseline
-            of ~65s. yFinance has a fixed per-batch overhead, so the per-symbol rate
+            of ~65s. yfinance has a fixed per-batch overhead, so the per-symbol rate
             may not improve proportionally, but we should expect a lower total elapsed time.
             """
             _, result = visible_result
@@ -265,7 +265,8 @@ class TestSnapshotPricingTable:
             union.Select()
 
         @pytest.fixture(scope="class")
-        def single_row_result(self, sut: SnapshotScenario_ShortCalls) -> tuple[SnapshotScenario_ShortCalls, PriceUpdateResult]:
+        def single_row_result(self, sut: SnapshotScenario_ShortCalls) -> tuple[
+            SnapshotScenario_ShortCalls, PriceUpdateResult]:
             """Select BA only, run the SELECTED scope."""
             self._select_ws_rows(sut, [self.BA_WS_ROW])
             result: PriceUpdateResult = PriceUpdater(sut).update_prices(scope=PriceUpdateScope.SELECTED)
@@ -273,7 +274,8 @@ class TestSnapshotPricingTable:
             return sut, result
 
         @pytest.fixture(scope="class")
-        def two_row_result(self, sut: SnapshotScenario_ShortCalls) -> tuple[SnapshotScenario_ShortCalls, PriceUpdateResult]:
+        def two_row_result(self, sut: SnapshotScenario_ShortCalls) -> tuple[
+            SnapshotScenario_ShortCalls, PriceUpdateResult]:
             """Select BA + CCJ_17 (non-contiguous in worksheet), run SELECTED scope."""
             self._select_ws_rows(sut, [self.BA_WS_ROW, self.CCJ_WS_ROW])
             result: PriceUpdateResult = PriceUpdater(sut).update_prices(scope=PriceUpdateScope.SELECTED)
@@ -349,7 +351,6 @@ class TestSnapshotPricingTable:
         @pytest.mark.skip(reason="run on demand only")
         def test_not_sure_yet(self, sut_with_bad_symbol):
             PriceUpdater(sut_with_bad_symbol).update_prices()
-
 
     class TestMockedPriceUpdate:
         """

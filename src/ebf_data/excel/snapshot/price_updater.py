@@ -117,6 +117,7 @@ class PriceUpdater:
         )
         last_price_values: list = last_price_range.value
 
+
         for ticker, indices in ticker_to_indices.items():
             price = prices.get(ticker)
             if price is None:
