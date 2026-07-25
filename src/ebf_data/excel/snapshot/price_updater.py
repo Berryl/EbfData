@@ -109,34 +109,36 @@ class PriceUpdater:
         data_body = self._snapshot.table.data_body_range
         table_row_count = data_body.shape[0]
         last_price_ws_col = get_data_body_column(data_body, df, self.LAST_PRICE_COLUMN)
-
         first_row = data_body.row
         last_price_range = self._snapshot.sheet.range(
             (first_row, last_price_ws_col),
             (first_row + table_row_count - 1, last_price_ws_col)
         )
-        last_price_values: list = last_price_range.value
-
-
-        for ticker, indices in ticker_to_indices.items():
-            price = prices.get(ticker)
-            if price is None:
-                logger.warning(f"No price available for {ticker} - Last Price unchanged")
-                failed_tickers.append(ticker)
-                failures_to_flag.append((ticker, indices))
-                continue
-            for idx in indices:
-                row_position: int = df.index.get_loc(idx)
-                if row_position >= table_row_count:
-                    logger.warning(
-                        f"Skipping write for {ticker} at position {row_position} "
-                        f"- outside data body range"
-                    )
-                    continue
-                last_price_values[row_position] = price
-                result.updated_rows += 1
 
         with SuspendAppUpdates(self._snapshot.book.app):
+            last_price_values: list = last_price_range.value
+            print(f"DEBUG last_price_values[:3]={last_price_values[:3]}")
+            print(f"DEBUG df.index[:5]={df.index[:5].tolist()}")
+            print(f"DEBUG first active ticker_to_indices sample: {next(iter(ticker_to_indices.items()))}")
+
+            for ticker, indices in ticker_to_indices.items():
+                price = prices.get(ticker)
+                if price is None:
+                    logger.warning(f"No price available for {ticker} - Last Price unchanged")
+                    failed_tickers.append(ticker)
+                    failures_to_flag.append((ticker, indices))
+                    continue
+                for idx in indices:
+                    row_position: int = df.index.get_loc(idx)
+                    if row_position >= table_row_count:
+                        logger.warning(
+                            f"Skipping write for {ticker} at position {row_position} "
+                            f"- outside data body range"
+                        )
+                        continue
+                    last_price_values[row_position] = price
+                    result.updated_rows += 1
+
             last_price_range.value = [[v] for v in last_price_values]
 
         for ticker, indices in failures_to_flag:
