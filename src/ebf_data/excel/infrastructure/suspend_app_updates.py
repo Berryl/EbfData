@@ -26,5 +26,8 @@ class SuspendAppUpdates:
         return self
 
     def __exit__(self, *_) -> None:
+        self._app.api.Calculate()
         self._app.calculation = self._calculation
         self._app.screen_updating = self._screen_updating
+
+
