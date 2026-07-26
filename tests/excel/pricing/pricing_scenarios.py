@@ -1,7 +1,7 @@
 from tests.excel.infrastructure.fixtures.xl_test_scenario import xlTestScenario
 
 SNAP_EQUITY_WB = "resources/scenarios/snapshot equity pricing.xlsx"
-SNAP_SC_WB = "resources/scenarios/snapshot SCs.xlsx"
+SNAP_SC_WB = "resources/scenarios/snapshot SC pricing.xlsx"
 SNAP_BAD_SYMBOL_WB = "resources/scenarios/snapshot With Bad Symbol.xlsx"
 SNAP_WKS = "SNAP"
 SNAP_TABLE = "SnapshotTable"

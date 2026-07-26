@@ -63,10 +63,10 @@ class OptionPriceUpdater:
         )
 
     def _update_short_option_prices(
-        self,
-        symbol_column: str,
-        ask_column: str,
-        run_info_range: str,
+            self,
+            symbol_column: str,
+            ask_column: str,
+            run_info_range: str,
     ) -> PriceUpdateResult:
         """
         Fetch and write current ask prices for all active short option rows
@@ -107,8 +107,6 @@ class OptionPriceUpdater:
 
         t1 = time.monotonic()
         prices = self._fetcher.fetch_ask_prices(contracts)
-        print(f"DEBUG prices: {prices}")
-
         result.price_fetching_time = time.monotonic() - t1
 
         failed_symbols: list[str] = []
@@ -123,35 +121,28 @@ class OptionPriceUpdater:
             (first_row, ask_ws_col),
             (first_row + table_row_count - 1, ask_ws_col)
         )
-        ask_values: list = ask_range.value
-
-        for occ, indices in symbol_to_indices.items():
-            ask = prices.get(occ)
-            print(f"DEBUG {occ}: ask={ask}, indices={indices}")
-            if ask is None:
-                logger.warning(f"No ask price available for {occ} - {ask_column} unchanged")
-                failed_symbols.append(occ)
-                continue
-            for idx in indices:
-                row_position: int = df.index.get_loc(idx)
-                if row_position >= table_row_count:
-                    logger.warning(
-                        f"Skipping write for {occ} at position {row_position} "
-                        f"- outside data body range"
-                    )
-                    continue
-                ask_values[row_position] = ask
-                result.updated_rows += 1
-
-        print(f"DEBUG after loop - ask_values[159]={ask_values[159]}, ask_values[194]={ask_values[194]}")
 
         with SuspendAppUpdates(self._snapshot.book.app):
-            ask_range.value = [[v] for v in ask_values]
+            ask_values: list = ask_range.value
 
-        print(f"DEBUG wrote {len(ask_values)} values to col={ask_ws_col}, first_row={first_row}")
-        print(
-            f"DEBUG sample written: ask_range[159].value={self._snapshot.sheet.range((first_row + 159, ask_ws_col)).value}")
-        print(f"DEBUG ask_range address: {ask_range.address}")
+            for occ, indices in symbol_to_indices.items():
+                ask = prices.get(occ)
+                if ask is None:
+                    logger.warning(f"No ask price available for {occ} - {ask_column} unchanged")
+                    failed_symbols.append(occ)
+                    continue
+                for idx in indices:
+                    row_position: int = df.index.get_loc(idx)
+                    if row_position >= table_row_count:
+                        logger.warning(
+                            f"Skipping write for {occ} at position {row_position} "
+                            f"- outside data body range"
+                        )
+                        continue
+                    ask_values[row_position] = ask
+                    result.updated_rows += 1
+
+            ask_range.value = [[v] for v in ask_values]
 
         result.excel_updating_time = time.monotonic() - t2
         result.failed = failed_symbols
