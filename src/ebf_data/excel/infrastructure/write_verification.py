@@ -14,7 +14,7 @@ def find_verification_sample(
         symbol_to_indices: dict[str, list[int]],
         prices: dict[str, float | None],
         df_index: pd.Index,
-        first_row: int = 0,
+        first_row: int,
 ) -> tuple[int, float] | None:
     """
     Find the first successfully fetched symbol and return

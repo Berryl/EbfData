@@ -73,7 +73,7 @@ class TestFindVerificationSample:
             FIRST_ROW=10
             exp_row = FIRST_ROW + 5 # 5 is the row at index zero, so row 15 absolute
             result = find_verification_sample(symbol_to_indices, prices, df_index, first_row=FIRST_ROW)
-            assert result == (15, 77.0)
+            assert result == (exp_row, 77.0)
 
         def test_works_with_numpy_int64_index(self):
             """get_loc sometimes returns np.int64 – make sure we handle it."""
@@ -81,6 +81,46 @@ class TestFindVerificationSample:
             symbol_to_indices = {"SYM": [2]}
             prices = {"SYM": 42.0}
 
-            result = find_verification_sample(symbol_to_indices, prices, idx)
-            assert result == (2, 42.0)
+            FIRST_ROW=1
+            exp_row = FIRST_ROW + 2
+            result = find_verification_sample(symbol_to_indices, prices, idx, first_row=FIRST_ROW)
+            assert result == (exp_row, 42.0)
             assert isinstance(result[0], int)
+
+    class TestWhenNoFetchedPricesExist:
+        def test_returns_none_when_all_prices_are_none(self, df_index):
+            symbol_to_indices = {"A": [1], "B": [4]}
+            prices = {"A": None, "B": None}
+
+            assert find_verification_sample(symbol_to_indices, prices, df_index, 5) is None
+
+        def test_returns_none_when_prices_dict_empty(self, df_index):
+            symbol_to_indices = {"A": [0]}
+            prices = {}
+
+            assert find_verification_sample(symbol_to_indices, prices, df_index, 1) is None
+
+    class TestEdgeCases:
+        def test_skips_empty_indices_list(self, df_index):
+            symbol_to_indices = {"EMPTY": [], "GOOD": [4], }
+            prices = {"EMPTY": 11.0, "GOOD": 22.0}
+
+            result = find_verification_sample(symbol_to_indices, prices, df_index, first_row=1)
+            assert result == (5, 22.0)
+
+        def test_missing_label_raises_key_error(self, df_index):
+            symbol_to_indices = {"MISSING": [99]}  # 99 not in index
+            prices = {"MISSING": 1.23}
+
+            with pytest.raises(KeyError):
+                find_verification_sample(symbol_to_indices, prices, df_index, first_row=1)
+
+        def test_non_unique_index_raises(self):
+            """Only relevant if you added the uniqueness guard."""
+            dup_index = pd.Index([0, 1, 1, 2])  # label 1 appears twice
+            symbol_to_indices = {"DUP": [1]}
+            prices = {"DUP": 99.0}
+
+            with pytest.raises((AssertionError, ValueError), match="[Nn]on-unique"):
+                find_verification_sample(symbol_to_indices, prices, dup_index, first_row=1)
+
