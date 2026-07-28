@@ -15,7 +15,7 @@ def get_data_body_column(db_range: Range, df: pd.DataFrame, column_name: str) ->
         ) from None
 
     # Safely handle int vs. slice from the Excel COM object
-    col = db_range.column
+    col: Range = db_range.column
     start_col = col.start if isinstance(col, slice) else col
 
     return start_col + col_index
