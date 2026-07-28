@@ -23,6 +23,13 @@ class SnapshotScenario_WithBadSymbol(xlTestScenario):
     def __init__(self) -> None:
         super().__init__(SNAP_BAD_SYMBOL_WB, SNAP_WKS, SNAP_TABLE)
 
+class SnapshotScenario_ShortCalls(xlTestScenario):
+    """
+    Scenario for testing short calls.
+    """
+    def __init__(self) -> None:
+        super().__init__(SNAP_SC_WB, SNAP_WKS, SNAP_TABLE)
+
 class SnapshotScenario_ShortPuts(xlTestScenario):
     """
     Scenario for testing short calls.

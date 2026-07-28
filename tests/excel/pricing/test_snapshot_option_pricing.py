@@ -2,15 +2,15 @@ import pytest
 
 from ebf_data.excel.snapshot.option_price_updater import OptionPriceUpdater
 from ebf_data.excel.snapshot.price_updater import PriceUpdateResult
-from tests.excel.pricing.pricing_scenarios import SnapshotScenario_ShortPuts
+from tests.excel.pricing.pricing_scenarios import SnapshotScenario_ShortCalls, SnapshotScenario_ShortPuts
 
 
 class TestSnapshotShortCallPricing:
     SC_EXP_DATE_COLUMN = "SC Exp Date"
 
     @pytest.fixture(scope="module")
-    def source(self) -> SnapshotScenario_ShortPuts:
-        return SnapshotScenario_ShortPuts()
+    def source(self) -> SnapshotScenario_ShortCalls:
+        return SnapshotScenario_ShortCalls()
 
     @pytest.fixture(scope="class")
     def sut(self, source) -> tuple[PriceUpdateResult, OptionPriceUpdater]:
