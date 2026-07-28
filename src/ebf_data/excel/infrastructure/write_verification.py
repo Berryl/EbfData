@@ -1,4 +1,7 @@
 from typing import Any
+
+import pandas as pd
+import numpy as np
 from xlwings import Sheet
 
 
@@ -7,13 +10,44 @@ class PriceWriteVerificationError(Exception):
     pass
 
 
+def find_verification_sample(
+        symbol_to_indices: dict[str, list[int]],
+        prices: dict[str, float | None],
+        df_index: pd.Index,
+        first_row: int = 0,
+) -> tuple[int, float] | None:
+    """
+    Find the first successfully fetched symbol and return
+    (ws_row, expected_value) for post-write verification.
+
+    Returns None if no successful prices exist.
+
+    Assumptions
+    -----------
+    - Each list in symbol_to_indices is non-empty.
+    - df_index labels are unique (get_loc returns an int).
+    - The integer stored in the indices lists are valid labels present in df_index.
+    """
+    for symbol, indices in symbol_to_indices.items():
+        if not indices:  # defensive
+            continue
+        price = prices.get(symbol)
+        if price is not None:
+            row_position = df_index.get_loc(indices[0])
+            assert isinstance(row_position, (int, np.integer)), (
+                f"Non-unique index label {indices[0]!r} – cannot determine a single worksheet row"
+            )
+            return first_row + int(row_position), price
+    return None
+
+
 def verify_column_write(
-    sheet: Sheet,
-    ws_row: int,
-    ws_col: int,
-    expected: Any,
-    *,
-    tolerance: float | int = 0.001,
+        sheet: Sheet,
+        ws_row: int,
+        ws_col: int,
+        expected: Any,
+        *,
+        tolerance: float | int = 0.001,
 ) -> None:
     """
     Read back a single cell after a bulk column write and confirm the

@@ -25,6 +25,7 @@ class PriceUpdateResult:
     total_symbols: int = 0
     updated_rows: int = 0
     failed: list[str] = field(default_factory=list)
+    write_verified: bool = True
     price_fetching_time: float = 0.0
     excel_updating_time: float = 0.0
     total_time: float = 0.0
