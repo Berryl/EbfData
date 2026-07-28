@@ -10,7 +10,7 @@ class TestWriteVerification:
     def sut(self) -> TesterTable:
         table = TesterTable()
         yield table
-        # table.close()
+        table.close()
 
     @pytest.fixture
     def sheet(self, sut: TesterTable) -> Sheet:
