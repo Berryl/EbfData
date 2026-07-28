@@ -64,12 +64,8 @@ class OptionPriceUpdater:
             run_info_range=self.SP_RUN_INFO_RANGE,
         )
 
-    def _update_short_option_prices(
-            self,
-            symbol_column: str,
-            ask_column: str,
-            run_info_range: str,
-    ) -> PriceUpdateResult:
+    def _update_short_option_prices(self, symbol_column: str, ask_column: str, run_info_range: str,
+                                    ) -> PriceUpdateResult:
         """
         Fetch and write current ask prices for all active short option rows
         of a given type. Driven by the symbol and ask column names, and the
@@ -126,39 +122,41 @@ class OptionPriceUpdater:
 
         sample = find_verification_sample(symbol_to_indices, prices, df.index, first_row)
 
-        try:
-            with SuspendAppUpdates(self._snapshot.book.app):
-                ask_values: list = ask_range.value
+        with SuspendAppUpdates(self._snapshot.book.app):
+            ask_values: list = ask_range.value
 
-                for occ, indices in symbol_to_indices.items():
-                    ask = prices.get(occ)
-                    if ask is None:
-                        logger.warning(f"No ask price available for {occ} - {ask_column} unchanged")
-                        failed_symbols.append(occ)
+            for occ, indices in symbol_to_indices.items():
+                ask = prices.get(occ)
+                if ask is None:
+                    logger.warning(f"No ask price available for {occ} - {ask_column} unchanged")
+                    failed_symbols.append(occ)
+                    continue
+                for idx in indices:
+                    row_position: int = df.index.get_loc(idx)
+                    if row_position >= table_row_count:
+                        logger.warning(
+                            f"Skipping write for {occ} at position {row_position} "
+                            f"- outside data body range"
+                        )
                         continue
-                    for idx in indices:
-                        row_position: int = df.index.get_loc(idx)
-                        if row_position >= table_row_count:
-                            logger.warning(
-                                f"Skipping write for {occ} at position {row_position} "
-                                f"- outside data body range"
-                            )
-                            continue
-                        ask_values[row_position] = ask
-                        result.updated_rows += 1
+                    ask_values[row_position] = ask
+                    result.updated_rows += 1
 
-                ask_range.value = [[v] for v in ask_values]
+            ask_range.value = [[v] for v in ask_values]
 
-                if sample is not None:
-                    verify_column_write(self._snapshot.sheet, sample[0], ask_ws_col, sample[1], )
-
-        except PriceWriteVerificationError as e:
-            logger.critical(f"{ask_column} write could not be verified - column may be corrupt: {e}")
-            result.write_verified = False
-            result.excel_updating_time = time.monotonic() - t2
-            result.failed = failed_symbols
-            result.total_time = time.monotonic() - t0
-            return result
+        # Verify after SuspendAppUpdates exits (and Calculate() has fired)
+        if sample is not None:
+            try:
+                verify_column_write(self._snapshot.sheet, sample[0], ask_ws_col, sample[1], )
+            except PriceWriteVerificationError as e:
+                logger.critical(
+                    f"{ask_column} write could not be verified - column may be corrupt: {e}"
+                )
+                result.write_verified = False
+                result.excel_updating_time = time.monotonic() - t2
+                result.failed = failed_symbols
+                result.total_time = time.monotonic() - t0
+                return result
 
         result.excel_updating_time = time.monotonic() - t2
         result.failed = failed_symbols

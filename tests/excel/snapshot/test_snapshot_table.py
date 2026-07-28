@@ -41,7 +41,7 @@ class TestSnapshotTable:
             assert assigned.empty
 
     class TestPricing:
-        @pytest.mark.skip(reason="run on demand only")
+        # @pytest.mark.skip(reason="run on demand only")
         def test_can_get_pricing(self, sut: SnapshotTable):
             PriceUpdater(sut).update_prices()
 

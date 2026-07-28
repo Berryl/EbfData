@@ -120,45 +120,40 @@ class PriceUpdater:
 
         sample = find_verification_sample(ticker_to_indices, prices, df.index, first_row)
 
-        try:
-            with SuspendAppUpdates(self._snapshot.book.app):
-                last_price_values: list = last_price_range.value
+        with SuspendAppUpdates(self._snapshot.book.app):
+            last_price_values: list = last_price_range.value
 
-                for ticker, indices in ticker_to_indices.items():
-                    price = prices.get(ticker)
-                    if price is None:
-                        logger.warning(f"No price available for {ticker} - Last Price unchanged")
-                        failed_tickers.append(ticker)
-                        failures_to_flag.append((ticker, indices))
+            for ticker, indices in ticker_to_indices.items():
+                price = prices.get(ticker)
+                if price is None:
+                    logger.warning(f"No price available for {ticker} - Last Price unchanged")
+                    failed_tickers.append(ticker)
+                    failures_to_flag.append((ticker, indices))
+                    continue
+                for idx in indices:
+                    row_position: int = df.index.get_loc(idx)
+                    if row_position >= table_row_count:
+                        logger.warning(
+                            f"Skipping write for {ticker} at position {row_position} "
+                            f"- outside data body range"
+                        )
                         continue
-                    for idx in indices:
-                        row_position: int = df.index.get_loc(idx)
-                        if row_position >= table_row_count:
-                            logger.warning(
-                                f"Skipping write for {ticker} at position {row_position} "
-                                f"- outside data body range"
-                            )
-                            continue
-                        last_price_values[row_position] = price
-                        result.updated_rows += 1
+                    last_price_values[row_position] = price
+                    result.updated_rows += 1
 
-                last_price_range.value = [[v] for v in last_price_values]
+            last_price_range.value = [[v] for v in last_price_values]
 
-                if sample is not None:
-                    verify_column_write(
-                        self._snapshot.sheet,
-                        sample[0],
-                        last_price_ws_col,
-                        sample[1],
-                    )
-
-        except PriceWriteVerificationError as e:
-            logger.critical(f"Last Price write could not be verified - column may be corrupt: {e}")
-            result.write_verified = False
-            result.excel_updating_time = time.monotonic() - t2
-            result.failed = failed_tickers
-            result.total_time = time.monotonic() - t0
-            return result
+        # Verify after SuspendAppUpdates exits (and Calculate() has fired)
+        if sample is not None:
+            try:
+                verify_column_write(self._snapshot.sheet, sample[0], last_price_ws_col, sample[1],)
+            except PriceWriteVerificationError as e:
+                logger.critical(f"Last Price write could not be verified - column may be corrupt: {e}")
+                result.write_verified = False
+                result.excel_updating_time = time.monotonic() - t2
+                result.failed = failed_tickers
+                result.total_time = time.monotonic() - t0
+                return result
 
         for ticker, indices in failures_to_flag:
             self._flag_failed_rows(ticker, indices, df)
