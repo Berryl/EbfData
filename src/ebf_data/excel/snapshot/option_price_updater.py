@@ -11,11 +11,13 @@ from ebf_trading.domain.value_objects.option_specific.symbol_conversion import s
 
 from ebf_data.excel.infrastructure.suspend_app_updates import SuspendAppUpdates
 from ebf_data.excel.infrastructure.table_helpers import get_data_body_column
+from ebf_data.excel.infrastructure.write_verification import find_verification_sample, verify_column_write, \
+    PriceWriteVerificationError
 from ebf_data.excel.pricing.option_price_fetcher import OptionPriceFetcher
 from ebf_data.excel.pricing.price_fetcher import PriceUpdateResult
 from ebf_data.excel.pricing.yfinance_option_fetcher import YFinanceOptionFetcher
-from ebf_data.excel.snapshot.snapshot_table import SnapshotTable
 from ebf_data.excel.snapshot.price_updater import _set_dv_message
+from ebf_data.excel.snapshot.snapshot_table import SnapshotTable
 
 logger = logging.getLogger(__name__)
 
@@ -39,9 +41,9 @@ class OptionPriceUpdater:
     DV_TITLE = "YFinance Option Pricing"
 
     def __init__(
-        self,
-        snapshot: SnapshotTable,
-        fetcher: OptionPriceFetcher | None = None,
+            self,
+            snapshot: SnapshotTable,
+            fetcher: OptionPriceFetcher | None = None,
     ) -> None:
         self._snapshot = snapshot
         self._fetcher = fetcher or YFinanceOptionFetcher()
@@ -122,31 +124,44 @@ class OptionPriceUpdater:
             (first_row + table_row_count - 1, ask_ws_col)
         )
 
-        with SuspendAppUpdates(self._snapshot.book.app):
-            ask_values: list = ask_range.value
+        sample = find_verification_sample(symbol_to_indices, prices, df.index, first_row)
 
-            for occ, indices in symbol_to_indices.items():
-                ask = prices.get(occ)
-                if ask is None:
-                    logger.warning(f"No ask price available for {occ} - {ask_column} unchanged")
-                    failed_symbols.append(occ)
-                    continue
-                for idx in indices:
-                    row_position: int = df.index.get_loc(idx)
-                    if row_position >= table_row_count:
-                        logger.warning(
-                            f"Skipping write for {occ} at position {row_position} "
-                            f"- outside data body range"
-                        )
+        try:
+            with SuspendAppUpdates(self._snapshot.book.app):
+                ask_values: list = ask_range.value
+
+                for occ, indices in symbol_to_indices.items():
+                    ask = prices.get(occ)
+                    if ask is None:
+                        logger.warning(f"No ask price available for {occ} - {ask_column} unchanged")
+                        failed_symbols.append(occ)
                         continue
-                    ask_values[row_position] = ask
-                    result.updated_rows += 1
+                    for idx in indices:
+                        row_position: int = df.index.get_loc(idx)
+                        if row_position >= table_row_count:
+                            logger.warning(
+                                f"Skipping write for {occ} at position {row_position} "
+                                f"- outside data body range"
+                            )
+                            continue
+                        ask_values[row_position] = ask
+                        result.updated_rows += 1
 
-            ask_range.value = [[v] for v in ask_values]
+                ask_range.value = [[v] for v in ask_values]
+
+                if sample is not None:
+                    verify_column_write(self._snapshot.sheet, sample[0], ask_ws_col, sample[1], )
+
+        except PriceWriteVerificationError as e:
+            logger.critical(f"{ask_column} write could not be verified - column may be corrupt: {e}")
+            result.write_verified = False
+            result.excel_updating_time = time.monotonic() - t2
+            result.failed = failed_symbols
+            result.total_time = time.monotonic() - t0
+            return result
 
         result.excel_updating_time = time.monotonic() - t2
         result.failed = failed_symbols
-
         self._summarize_run(result, run_info_range)
         result.total_time = time.monotonic() - t0
 

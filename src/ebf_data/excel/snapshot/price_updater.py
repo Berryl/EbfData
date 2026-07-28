@@ -11,6 +11,8 @@ from ebf_core.date_time.formatting import get_formatted_datetime, get_formatted_
 
 from ebf_data.excel.infrastructure.suspend_app_updates import SuspendAppUpdates
 from ebf_data.excel.infrastructure.table_helpers import get_data_body_column
+from ebf_data.excel.infrastructure.write_verification import find_verification_sample, verify_column_write, \
+    PriceWriteVerificationError
 from ebf_data.excel.pricing.price_fetcher import PriceFetcher, PriceUpdateResult
 from ebf_data.excel.pricing.yfinance_fetcher import YFinanceFetcher
 from ebf_data.excel.snapshot.snapshot_table import SnapshotTable
@@ -110,43 +112,59 @@ class PriceUpdater:
         table_row_count = data_body.shape[0]
         last_price_ws_col = get_data_body_column(data_body, df, self.LAST_PRICE_COLUMN)
         first_row = data_body.row
+
         last_price_range = self._snapshot.sheet.range(
             (first_row, last_price_ws_col),
             (first_row + table_row_count - 1, last_price_ws_col)
         )
 
-        with SuspendAppUpdates(self._snapshot.book.app):
-            last_price_values: list = last_price_range.value
-            print(f"DEBUG last_price_values[:3]={last_price_values[:3]}")
-            print(f"DEBUG df.index[:5]={df.index[:5].tolist()}")
-            print(f"DEBUG first active ticker_to_indices sample: {next(iter(ticker_to_indices.items()))}")
+        sample = find_verification_sample(ticker_to_indices, prices, df.index, first_row)
 
-            for ticker, indices in ticker_to_indices.items():
-                price = prices.get(ticker)
-                if price is None:
-                    logger.warning(f"No price available for {ticker} - Last Price unchanged")
-                    failed_tickers.append(ticker)
-                    failures_to_flag.append((ticker, indices))
-                    continue
-                for idx in indices:
-                    row_position: int = df.index.get_loc(idx)
-                    if row_position >= table_row_count:
-                        logger.warning(
-                            f"Skipping write for {ticker} at position {row_position} "
-                            f"- outside data body range"
-                        )
+        try:
+            with SuspendAppUpdates(self._snapshot.book.app):
+                last_price_values: list = last_price_range.value
+
+                for ticker, indices in ticker_to_indices.items():
+                    price = prices.get(ticker)
+                    if price is None:
+                        logger.warning(f"No price available for {ticker} - Last Price unchanged")
+                        failed_tickers.append(ticker)
+                        failures_to_flag.append((ticker, indices))
                         continue
-                    last_price_values[row_position] = price
-                    result.updated_rows += 1
+                    for idx in indices:
+                        row_position: int = df.index.get_loc(idx)
+                        if row_position >= table_row_count:
+                            logger.warning(
+                                f"Skipping write for {ticker} at position {row_position} "
+                                f"- outside data body range"
+                            )
+                            continue
+                        last_price_values[row_position] = price
+                        result.updated_rows += 1
 
-            last_price_range.value = [[v] for v in last_price_values]
+                last_price_range.value = [[v] for v in last_price_values]
+
+                if sample is not None:
+                    verify_column_write(
+                        self._snapshot.sheet,
+                        sample[0],
+                        last_price_ws_col,
+                        sample[1],
+                    )
+
+        except PriceWriteVerificationError as e:
+            logger.critical(f"Last Price write could not be verified - column may be corrupt: {e}")
+            result.write_verified = False
+            result.excel_updating_time = time.monotonic() - t2
+            result.failed = failed_tickers
+            result.total_time = time.monotonic() - t0
+            return result
 
         for ticker, indices in failures_to_flag:
             self._flag_failed_rows(ticker, indices, df)
 
         result.excel_updating_time = time.monotonic() - t2
         result.failed = failed_tickers
-
         self._summarize_run(result, scope)
         result.total_time = time.monotonic() - t0
 
