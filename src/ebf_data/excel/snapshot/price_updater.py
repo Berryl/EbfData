@@ -113,15 +113,28 @@ class PriceUpdater:
         last_price_ws_col = get_data_body_column(data_body, df, self.LAST_PRICE_COLUMN)
         first_row = data_body.row
 
+        logger.debug(
+            f"data_body: first_row={first_row}, table_row_count={table_row_count}, "
+            f"last_price_ws_col={last_price_ws_col}"
+        )
+
         last_price_range = self._snapshot.sheet.range(
             (first_row, last_price_ws_col),
             (first_row + table_row_count - 1, last_price_ws_col)
         )
 
         sample = find_verification_sample(ticker_to_indices, prices, df.index, first_row)
+        logger.debug(
+            f"verification sample: ws_row={sample[0] if sample else None}, "
+            f"expected={sample[1] if sample else None}, ws_col={last_price_ws_col}"
+        )
 
         with SuspendAppUpdates(self._snapshot.book.app):
             last_price_values: list = last_price_range.value
+            logger.debug(
+                f"read complete: last_price_values[:3]={last_price_values[:3]}, "
+                f"len={len(last_price_values)}"
+            )
 
             for ticker, indices in ticker_to_indices.items():
                 price = prices.get(ticker)
@@ -138,17 +151,48 @@ class PriceUpdater:
                             f"- outside data body range"
                         )
                         continue
-                    last_price_values[row_position] = price
+                    last_price_values[row_position] = float(price)
                     result.updated_rows += 1
 
-            last_price_range.value = [[v] for v in last_price_values]
+            patched_sample = [
+                (df.index.get_loc(ticker_to_indices[t][0]),
+                 last_price_values[df.index.get_loc(ticker_to_indices[t][0])])
+                for t in ticker_to_indices
+                if prices.get(t) is not None
+            ][:5]
+            logger.debug(
+                f"patch loop complete: updated_rows={result.updated_rows}, "
+                f"first 5 patched (position, value)={patched_sample}"
+            )
+            logger.debug(f"last_price_values[:3] after patch={last_price_values[:3]}")
 
-        # Verify after SuspendAppUpdates exits (and Calculate() has fired)
+            chunk_size = 50
+            for start in range(0, len(last_price_values), chunk_size):
+                chunk = last_price_values[start:start + chunk_size]
+                self._snapshot.sheet.range(
+                    (first_row + start, last_price_ws_col),
+                    (first_row + start + len(chunk) - 1, last_price_ws_col)
+                ).value = [[float(v) if v is not None else None] for v in chunk]
+            logger.debug(f"chunked write complete: {len(last_price_values)} rows in chunks of {chunk_size}")
+
+        logger.debug(
+            f"SuspendAppUpdates exited - about to verify at "
+            f"({sample[0] if sample else None}, {last_price_ws_col})"
+        )
+
         if sample is not None:
             try:
-                verify_column_write(self._snapshot.sheet, sample[0], last_price_ws_col, sample[1],)
+                verify_column_write(
+                    self._snapshot.sheet,
+                    sample[0],
+                    last_price_ws_col,
+                    sample[1],
+                )
+                logger.debug(f"verification passed at ({sample[0]}, {last_price_ws_col})")
             except PriceWriteVerificationError as e:
-                logger.critical(f"Last Price write could not be verified - column may be corrupt: {e}")
+                logger.critical(
+                    f"Last Price write could not be verified - column may be corrupt: {e}"
+                )
                 result.write_verified = False
                 result.excel_updating_time = time.monotonic() - t2
                 result.failed = failed_tickers

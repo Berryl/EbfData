@@ -64,8 +64,12 @@ class OptionPriceUpdater:
             run_info_range=self.SP_RUN_INFO_RANGE,
         )
 
-    def _update_short_option_prices(self, symbol_column: str, ask_column: str, run_info_range: str,
-                                    ) -> PriceUpdateResult:
+    def _update_short_option_prices(
+            self,
+            symbol_column: str,
+            ask_column: str,
+            run_info_range: str,
+    ) -> PriceUpdateResult:
         """
         Fetch and write current ask prices for all active short option rows
         of a given type. Driven by the symbol and ask column names, and the
@@ -115,15 +119,28 @@ class OptionPriceUpdater:
         ask_ws_col = get_data_body_column(data_body, df, ask_column)
         first_row = data_body.row
 
+        logger.debug(
+            f"data_body: first_row={first_row}, table_row_count={table_row_count}, "
+            f"ask_ws_col={ask_ws_col}, ask_column={ask_column}"
+        )
+
         ask_range = self._snapshot.sheet.range(
             (first_row, ask_ws_col),
             (first_row + table_row_count - 1, ask_ws_col)
         )
 
         sample = find_verification_sample(symbol_to_indices, prices, df.index, first_row)
+        logger.debug(
+            f"verification sample: ws_row={sample[0] if sample else None}, "
+            f"expected={sample[1] if sample else None}, ws_col={ask_ws_col}"
+        )
 
         with SuspendAppUpdates(self._snapshot.book.app):
             ask_values: list = ask_range.value
+            logger.debug(
+                f"read complete: ask_values[:3]={ask_values[:3]}, "
+                f"len={len(ask_values)}"
+            )
 
             for occ, indices in symbol_to_indices.items():
                 ask = prices.get(occ)
@@ -142,12 +159,31 @@ class OptionPriceUpdater:
                     ask_values[row_position] = ask
                     result.updated_rows += 1
 
-            ask_range.value = [[v] for v in ask_values]
+            patched_sample = [
+                (df.index.get_loc(symbol_to_indices[occ][0]),
+                 ask_values[df.index.get_loc(symbol_to_indices[occ][0])])
+                for occ in symbol_to_indices
+                if prices.get(occ) is not None
+            ][:5]
+            logger.debug(f"patch loop complete: updated_rows={result.updated_rows}, "
+                         f"first 5 patched (position, value)={patched_sample}")
+            logger.debug(f"ask_values[:3] after patch={ask_values[:3]}")
 
-        # Verify after SuspendAppUpdates exits (and Calculate() has fired)
+            ask_range.value = [[v] for v in ask_values]
+            logger.debug(f"write dispatched to range {ask_range.address}")
+
+        logger.debug(f"SuspendAppUpdates exited - about to verify at "
+                     f"({sample[0] if sample else None}, {ask_ws_col})")
+
         if sample is not None:
             try:
-                verify_column_write(self._snapshot.sheet, sample[0], ask_ws_col, sample[1], )
+                verify_column_write(
+                    self._snapshot.sheet,
+                    sample[0],
+                    ask_ws_col,
+                    sample[1],
+                )
+                logger.debug(f"verification passed at ({sample[0]}, {ask_ws_col})")
             except PriceWriteVerificationError as e:
                 logger.critical(
                     f"{ask_column} write could not be verified - column may be corrupt: {e}"

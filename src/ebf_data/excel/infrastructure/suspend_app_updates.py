@@ -1,3 +1,4 @@
+import pythoncom
 import xlwings as xw
 
 
@@ -26,8 +27,13 @@ class SuspendAppUpdates:
         return self
 
     def __exit__(self, *_) -> None:
-        self._app.api.Calculate()
-        self._app.calculation = self._calculation
-        self._app.screen_updating = self._screen_updating
+        try:
+            pythoncom.PumpWaitingMessages()
+            self._app.api.Calculate()
+        finally:
+            if self._calculation is not None:
+                self._app.calculation = self._calculation
+            if self._screen_updating is not None:
+                self._app.screen_updating = self._screen_updating
 
 

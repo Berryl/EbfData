@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 
 from ebf_data.excel.snapshot.snapshot_table import SnapshotTable
@@ -40,20 +42,31 @@ class TestSnapshotTable:
 
             assert assigned.empty
 
+    @pytest.mark.skip(reason="run on demand only")
     class TestPricing:
-        # @pytest.mark.skip(reason="run on demand only")
         def test_can_get_pricing(self, sut: SnapshotTable):
             PriceUpdater(sut).update_prices()
 
-    class TestOptionPricing:
-        @pytest.fixture
-        def opu(self, sut) -> OptionPriceUpdater:
-            return OptionPriceUpdater(sut)
+    class TestEquityRunWithLogging:
+        def test_can_run_with_logging(self, sut: SnapshotTable, caplog):
+            with caplog.at_level(logging.INFO):
+                PriceUpdater(sut).update_prices()
+            if caplog.text.strip():
+                print("\n----- PriceUpdater log output -----")
+                print(caplog.text)
+                print("----- end log -----\n")
 
-        # @pytest.mark.skip(reason="run on demand only")
-        def test_can_get_short_call_pricing(self, opu):
-            opu.update_short_call_prices()
+            sut.refresh()
 
-        # @pytest.mark.skip(reason="run on demand only")
-        def test_can_get_short_put_pricing(self, opu):
-            opu.update_short_put_prices()
+        class TestOptionPricing:
+            @pytest.fixture
+            def opu(self, sut) -> OptionPriceUpdater:
+                return OptionPriceUpdater(sut)
+
+            # @pytest.mark.skip(reason="run on demand only")
+            def test_can_get_short_call_pricing(self, opu):
+                opu.update_short_call_prices()
+
+            # @pytest.mark.skip(reason="run on demand only")
+            def test_can_get_short_put_pricing(self, opu):
+                opu.update_short_put_prices()

@@ -7,6 +7,8 @@ end to end against a real workbook. Slow by nature; requires network.
 TestMockedPriceUpdate: mocks _fetch_prices to test write mechanics
 in isolation, without network dependency. (placeholder for now)
 """
+import logging
+
 import pytest
 
 from ebf_data.excel.snapshot.price_updater import PriceUpdater, PriceUpdateResult, PriceUpdateScope
@@ -34,6 +36,9 @@ SCENARIO_PRICES = {
 class TestSnapshotPricingTable:
     @pytest.fixture(scope="module")
     def sut(self) -> SnapshotScenario_EquityPricing:
+        # table = SnapshotScenario_EquityPricing()
+        # yield table
+        # table.close()
         return SnapshotScenario_EquityPricing()
 
     class TestReadStructure:
@@ -351,3 +356,14 @@ class TestSnapshotPricingTable:
         # @pytest.mark.skip(reason="run on demand only")
         def test_not_sure_yet(self, sut_with_bad_symbol):
             PriceUpdater(sut_with_bad_symbol).update_prices()
+
+    class TestEquityRunWithLogging:
+        def test_can_run_with_logging(self, sut: SnapshotScenario_EquityPricing, caplog):
+            with caplog.at_level(logging.DEBUG):
+                PriceUpdater(sut).update_prices()
+            if caplog.text.strip():
+                print("\n----- PriceUpdater log output -----")
+                print(caplog.text)
+                print("----- end log -----\n")
+
+            sut.refresh()
