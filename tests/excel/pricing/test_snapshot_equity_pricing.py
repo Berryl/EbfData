@@ -36,10 +36,10 @@ SCENARIO_PRICES = {
 class TestSnapshotPricingTable:
     @pytest.fixture(scope="module")
     def sut(self) -> SnapshotScenario_EquityPricing:
-        # table = SnapshotScenario_EquityPricing()
-        # yield table
-        # table.close()
-        return SnapshotScenario_EquityPricing()
+        table = SnapshotScenario_EquityPricing()
+        yield table
+        table.close()
+
 
     class TestReadStructure:
         def test_size(self, sut):
@@ -357,13 +357,16 @@ class TestSnapshotPricingTable:
         def test_not_sure_yet(self, sut_with_bad_symbol):
             PriceUpdater(sut_with_bad_symbol).update_prices()
 
-    class TestEquityRunWithLogging:
-        def test_can_run_with_logging(self, sut: SnapshotScenario_EquityPricing, caplog):
-            with caplog.at_level(logging.DEBUG):
-                PriceUpdater(sut).update_prices()
-            if caplog.text.strip():
-                print("\n----- PriceUpdater log output -----")
-                print(caplog.text)
-                print("----- end log -----\n")
+@pytest.mark.skip(reason="run on demand only")
+class TestEquityRunWithLogging:
+    def test_can_run_with_logging(self, caplog):
 
-            sut.refresh()
+        sut = SnapshotScenario_EquityPricing()
+        with caplog.at_level(logging.DEBUG):
+            PriceUpdater(sut).update_prices()
+        if caplog.text.strip():
+            print("\n----- PriceUpdater log output -----")
+            print(caplog.text)
+            print("----- end log -----\n")
+
+        sut.refresh()

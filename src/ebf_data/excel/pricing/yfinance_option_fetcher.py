@@ -12,6 +12,10 @@ from ebf_data.excel.pricing.option_price_fetcher import OptionPriceFetcher
 
 logger = logging.getLogger(__name__)
 
+# Silence noisy third-party loggers
+logging.getLogger("yfinance").setLevel(logging.WARNING)
+logging.getLogger("peewee").setLevel(logging.WARNING)
+
 
 class YFinanceOptionFetcher(OptionPriceFetcher):
     """

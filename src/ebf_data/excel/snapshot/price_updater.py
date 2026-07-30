@@ -151,7 +151,7 @@ class PriceUpdater:
                             f"- outside data body range"
                         )
                         continue
-                    last_price_values[row_position] = float(price)
+                    last_price_values[row_position] = price
                     result.updated_rows += 1
 
             patched_sample = [
@@ -166,14 +166,8 @@ class PriceUpdater:
             )
             logger.debug(f"last_price_values[:3] after patch={last_price_values[:3]}")
 
-            chunk_size = 50
-            for start in range(0, len(last_price_values), chunk_size):
-                chunk = last_price_values[start:start + chunk_size]
-                self._snapshot.sheet.range(
-                    (first_row + start, last_price_ws_col),
-                    (first_row + start + len(chunk) - 1, last_price_ws_col)
-                ).value = [[float(v) if v is not None else None] for v in chunk]
-            logger.debug(f"chunked write complete: {len(last_price_values)} rows in chunks of {chunk_size}")
+            last_price_range.value = [[v] for v in last_price_values]
+            logger.debug(f"write dispatched to range {last_price_range.address}")
 
         logger.debug(
             f"SuspendAppUpdates exited - about to verify at "

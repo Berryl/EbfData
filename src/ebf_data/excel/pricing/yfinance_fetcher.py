@@ -1,5 +1,5 @@
 """
-yFinance implementation of a PriceFetcher.
+yfinance implementation of a PriceFetcher.
 
 Primary method: yf.Tickers.info (best for current/last price).
 Fallback: yf.download() if the primary method fails entirely.
@@ -14,6 +14,9 @@ from ebf_data.excel.pricing.price_fetcher import PriceFetcher
 
 logger = logging.getLogger(__name__)
 
+# Silence noisy third-party loggers
+logging.getLogger("yfinance").setLevel(logging.WARNING)
+logging.getLogger("peewee").setLevel(logging.WARNING)
 
 class YFinanceFetcher(PriceFetcher):
 

@@ -1,3 +1,5 @@
+import logging
+
 import pytest
 
 from ebf_data.excel.snapshot.option_price_updater import OptionPriceUpdater
@@ -10,7 +12,9 @@ class TestSnapshotShortCallPricing:
 
     @pytest.fixture(scope="module")
     def source(self) -> SnapshotScenario_ShortCalls:
-        return SnapshotScenario_ShortCalls()
+        table = SnapshotScenario_ShortCalls()
+        yield table
+        table.close()
 
     @pytest.fixture(scope="class")
     def sut(self, source) -> tuple[PriceUpdateResult, OptionPriceUpdater]:
@@ -37,7 +41,9 @@ class TestSnapshotShortPutPricing:
 
     @pytest.fixture(scope="module")
     def source(self) -> SnapshotScenario_ShortPuts:
-        return SnapshotScenario_ShortPuts()
+        table = SnapshotScenario_ShortPuts()
+        yield table
+        table.close()
 
     @pytest.fixture(scope="class")
     def sut(self, source) -> tuple[PriceUpdateResult, OptionPriceUpdater]:
@@ -58,3 +64,16 @@ class TestSnapshotShortPutPricing:
             symbol = row[opu.SP_SYMBOL_COLUMN]
             assert price is not None, f"{symbol}: {opu.SP_ASK_COLUMN} is None after update"
             assert float(price) > 0, f"{symbol}: {opu.SP_ASK_COLUMN} {price} is not positive"
+
+    # @pytest.mark.skip(reason="run on demand only")
+    class TestShortCallRunWithLogging:
+        def test_can_run_with_logging(self, caplog):
+            sut = SnapshotScenario_ShortCalls()
+            with caplog.at_level(logging.DEBUG):
+                OptionPriceUpdater(sut).update_short_call_prices()
+            if caplog.text.strip():
+                print("\n----- OptionPriceUpdater log output -----")
+                print(caplog.text)
+                print("----- end log -----\n")
+
+            sut.refresh()
