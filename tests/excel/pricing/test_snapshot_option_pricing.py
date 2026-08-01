@@ -65,15 +65,15 @@ class TestSnapshotShortPutPricing:
             assert price is not None, f"{symbol}: {opu.SP_ASK_COLUMN} is None after update"
             assert float(price) > 0, f"{symbol}: {opu.SP_ASK_COLUMN} {price} is not positive"
 
-    # @pytest.mark.skip(reason="run on demand only")
-    class TestShortCallRunWithLogging:
-        def test_can_run_with_logging(self, caplog):
-            sut = SnapshotScenario_ShortCalls()
-            with caplog.at_level(logging.DEBUG):
-                OptionPriceUpdater(sut).update_short_call_prices()
-            if caplog.text.strip():
-                print("\n----- OptionPriceUpdater log output -----")
-                print(caplog.text)
-                print("----- end log -----\n")
+@pytest.mark.skip(reason="run on demand only")
+class TestShortCallRunWithLogging:
+    def test_can_run_with_logging(self, caplog):
+        sut = SnapshotScenario_ShortCalls()
+        with caplog.at_level(logging.DEBUG):
+            OptionPriceUpdater(sut).update_short_call_prices()
+        if caplog.text.strip():
+            print("\n----- OptionPriceUpdater log output -----")
+            print(caplog.text)
+            print("----- end log -----\n")
 
-            sut.refresh()
+        sut.refresh()

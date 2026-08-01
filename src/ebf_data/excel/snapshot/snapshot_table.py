@@ -24,6 +24,10 @@ CLEARED_SHORT_CALL_COLUMNS = [
 
 
 class SnapshotTable(xlTable):
+    SYMBOL_COLUMN = "Symbol"
+    POSITION_COLUMN = "Position"
+    LAST_PRICE_COLUMN = "Last Price"
+
     def __init__(self) -> None:
         super().__init__(find_open_book(SNAPSHOT_WB), SNAPSHOT_WKS, SNAPSHOT_TABLE)
 

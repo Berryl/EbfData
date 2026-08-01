@@ -1,31 +1,43 @@
 """
-Price updater for snapshot positions.
+Price fetcher for snapshot positions.
+
 """
 import logging
 import time
-from datetime import datetime
+from dataclasses import dataclass
 from enum import StrEnum, auto
 
 import pandas as pd
-from ebf_core.date_time.formatting import get_formatted_datetime, get_formatted_time_no_tz
 
-from ebf_data.excel.infrastructure.suspend_app_updates import SuspendAppUpdates
 from ebf_data.excel.infrastructure.table_helpers import get_data_body_column
-from ebf_data.excel.infrastructure.write_verification import find_verification_sample, verify_column_write, \
-    PriceWriteVerificationError
 from ebf_data.excel.pricing.price_fetcher import PriceFetcher, PriceUpdateResult
 from ebf_data.excel.pricing.yfinance_fetcher import YFinanceFetcher
 from ebf_data.excel.snapshot.snapshot_table import SnapshotTable
 
 logger = logging.getLogger(__name__)
 
-_XL_VALIDATE_INPUT_ONLY = 0
-
 
 class PriceUpdateScope(StrEnum):
     ALL = auto()  # all active positions (as determined by the Position being non-blank)
     SELECTED = auto()  # rows intersecting the current Excel selection & Symbol column
     VISIBLE = auto()  # rows not hidden by an active filter
+
+
+@dataclass(frozen=True)
+class SymbolPriceOutcome:
+    """
+    One row's fetch outcome: the raw Symbol-column text, the fetched price
+    (None on failure), and whether the fetch succeeded.
+
+    Kept separate from PriceUpdateResult (aggregate run stats) because a
+    workbook can have duplicate or suffixed symbols - e.g. two "PLTR" rows,
+    or "CCJ_17" / "CCJ_4.1" sharing a single fetch against base ticker
+    "CCJ" - that each need their own JSON entry carrying the raw text VBA
+    will match against the Symbol column.
+    """
+    symbol: str
+    price: float | None
+    success: bool
 
 
 # region helpers
@@ -36,48 +48,34 @@ def _extract_base_symbol(snapshot_symbol: str) -> str:
     return snapshot_symbol.split("_")[0]
 
 
-def _set_dv_message(rng, title: str, message: str) -> None:
-    """
-    Set a Data Validation input message on a range without constraining
-    the cell value (xlValidateInputOnly). Clears any existing DV first.
-    """
-    try:
-        rng.api.Validation.Delete()
-        rng.api.Validation.Add(
-            Type=_XL_VALIDATE_INPUT_ONLY,
-            AlertStyle=1,
-            Operator=1,
-            Formula1="0",
-        )
-        rng.api.Validation.InputTitle = title
-        rng.api.Validation.InputMessage = message
-        rng.api.Validation.ShowInput = True
-    except Exception as e:
-        logger.warning(f"Could not set DV message on range: {e}")
-
-
 # endregion
 
 
 class PriceUpdater:
     """
-    Writes current market prices into the Last Price column using the injected PriceFetcher.
-    The scope parameter controls which rows (Symbols) are targeted. See PriceUpdateScope
+    Fetches current market prices for a scope of snapshot rows using the
+    injected PriceFetcher. Returns per-row outcomes for PriceExporter to
+    write to JSON - does not touch the workbook itself. See PriceUpdateScope
+    for how the row scope is determined.
     """
 
-    SYMBOL_COLUMN = "Symbol"
-    LAST_PRICE_COLUMN = "Last Price"
-    POSITION_COLUMN = "Position"
-    RUN_INFO_RANGE = "LastPriceRunInfo"
-    DV_TITLE = "YFinance Pricing"
+    SYMBOL_COLUMN = SnapshotTable.SYMBOL_COLUMN
+    POSITION_COLUMN = SnapshotTable.POSITION_COLUMN
 
     def __init__(self, snapshot: SnapshotTable, fetcher: PriceFetcher | None = None) -> None:
         self._snapshot = snapshot
         self._fetcher = fetcher or YFinanceFetcher()
 
-    def update_prices(self, scope: PriceUpdateScope = PriceUpdateScope.ALL) -> PriceUpdateResult:
+    def fetch_prices(
+        self, scope: PriceUpdateScope = PriceUpdateScope.ALL
+    ) -> tuple[PriceUpdateResult, list[SymbolPriceOutcome]]:
         """
-        Fetch and write current prices for snapshot rows in the given scope.
+        Fetch current prices for snapshot rows in the given scope.
+
+        Returns the aggregate run summary alongside one SymbolPriceOutcome
+        per targeted row, in the raw Symbol-column text (duplicates and
+        suffixed variants included, each carrying the price fetched for
+        their shared base ticker).
         """
         t0 = time.monotonic()
         result = PriceUpdateResult()
@@ -89,7 +87,7 @@ class PriceUpdater:
         if target.empty:
             logger.info(f"No rows to update for scope={scope}")
             result.total_time = time.monotonic() - t0
-            return result
+            return result, []
 
         ticker_to_indices: dict[str, list[int]] = {}
         for idx, row in target.iterrows():
@@ -105,103 +103,27 @@ class PriceUpdater:
         result.price_fetching_time = time.monotonic() - t1
 
         failed_tickers: list[str] = []
-        failures_to_flag: list[tuple[str, list[int]]] = []
+        outcomes: list[SymbolPriceOutcome] = []
 
-        t2 = time.monotonic()
-        data_body = self._snapshot.table.data_body_range
-        table_row_count = data_body.shape[0]
-        last_price_ws_col = get_data_body_column(data_body, df, self.LAST_PRICE_COLUMN)
-        first_row = data_body.row
+        for ticker, indices in ticker_to_indices.items():
+            price = prices.get(ticker)
+            success = price is not None
+            if not success:
+                logger.warning(f"No price available for {ticker}")
+                failed_tickers.append(ticker)
+            for idx in indices:
+                raw_symbol = str(df.loc[idx, self.SYMBOL_COLUMN])
+                outcomes.append(SymbolPriceOutcome(symbol=raw_symbol, price=price, success=success))
 
-        logger.debug(
-            f"data_body: first_row={first_row}, table_row_count={table_row_count}, "
-            f"last_price_ws_col={last_price_ws_col}"
-        )
-
-        last_price_range = self._snapshot.sheet.range(
-            (first_row, last_price_ws_col),
-            (first_row + table_row_count - 1, last_price_ws_col)
-        )
-
-        sample = find_verification_sample(ticker_to_indices, prices, df.index, first_row)
-        logger.debug(
-            f"verification sample: ws_row={sample[0] if sample else None}, "
-            f"expected={sample[1] if sample else None}, ws_col={last_price_ws_col}"
-        )
-
-        with SuspendAppUpdates(self._snapshot.book.app):
-            last_price_values: list = last_price_range.value
-            logger.debug(
-                f"read complete: last_price_values[:3]={last_price_values[:3]}, "
-                f"len={len(last_price_values)}"
-            )
-
-            for ticker, indices in ticker_to_indices.items():
-                price = prices.get(ticker)
-                if price is None:
-                    logger.warning(f"No price available for {ticker} - Last Price unchanged")
-                    failed_tickers.append(ticker)
-                    failures_to_flag.append((ticker, indices))
-                    continue
-                for idx in indices:
-                    row_position: int = df.index.get_loc(idx)
-                    if row_position >= table_row_count:
-                        logger.warning(
-                            f"Skipping write for {ticker} at position {row_position} "
-                            f"- outside data body range"
-                        )
-                        continue
-                    last_price_values[row_position] = price
-                    result.updated_rows += 1
-
-            patched_sample = [
-                (df.index.get_loc(ticker_to_indices[t][0]),
-                 last_price_values[df.index.get_loc(ticker_to_indices[t][0])])
-                for t in ticker_to_indices
-                if prices.get(t) is not None
-            ][:5]
-            logger.debug(
-                f"patch loop complete: updated_rows={result.updated_rows}, "
-                f"first 5 patched (position, value)={patched_sample}"
-            )
-            logger.debug(f"last_price_values[:3] after patch={last_price_values[:3]}")
-
-            last_price_range.value = [[v] for v in last_price_values]
-            logger.debug(f"write dispatched to range {last_price_range.address}")
-
-        logger.debug(
-            f"SuspendAppUpdates exited - about to verify at "
-            f"({sample[0] if sample else None}, {last_price_ws_col})"
-        )
-
-        if sample is not None:
-            try:
-                verify_column_write(
-                    self._snapshot.sheet,
-                    sample[0],
-                    last_price_ws_col,
-                    sample[1],
-                )
-                logger.debug(f"verification passed at ({sample[0]}, {last_price_ws_col})")
-            except PriceWriteVerificationError as e:
-                logger.critical(
-                    f"Last Price write could not be verified - column may be corrupt: {e}"
-                )
-                result.write_verified = False
-                result.excel_updating_time = time.monotonic() - t2
-                result.failed = failed_tickers
-                result.total_time = time.monotonic() - t0
-                return result
-
-        for ticker, indices in failures_to_flag:
-            self._flag_failed_rows(ticker, indices, df)
-
-        result.excel_updating_time = time.monotonic() - t2
         result.failed = failed_tickers
-        self._summarize_run(result, scope)
         result.total_time = time.monotonic() - t0
 
-        return result
+        logger.info(
+            f"Fetched prices for {len(tickers) - len(failed_tickers)} of "
+            f"{len(tickers)} symbol(s) in {result.total_time:.1f}s"
+        )
+
+        return result, outcomes
 
     def _get_rows(self, df: pd.DataFrame, scope: PriceUpdateScope) -> pd.DataFrame:
         """Return the subset of df rows to update for the given scope."""
@@ -287,43 +209,3 @@ class PriceUpdater:
             # SpecialCells raises when no rows are visible or no filter is active
             logger.info("No visible rows (or no filter active)")
             return df.iloc[:0]
-
-    def _flag_failed_rows(self, ticker: str, indices: list[int], df: pd.DataFrame) -> None:
-        """Set a DV error message on each Last Price cell for a failed ticker."""
-        col_index = df.columns.get_loc(self.LAST_PRICE_COLUMN)
-        table_row_count = self._snapshot.table.data_body_range.shape[0]
-        for idx in indices:
-            row_position: int = df.index.get_loc(idx)
-            if row_position >= table_row_count:
-                logger.warning(
-                    f"Skipping DV flag for {ticker} at position {row_position} "
-                    f"- outside table data body range ({table_row_count} rows)"
-                )
-                continue
-            cell = self._snapshot.table.data_body_range[row_position, col_index]
-            _set_dv_message(cell, self.DV_TITLE, f"⚠ No price available for {ticker}")
-
-    def _summarize_run(self, result: PriceUpdateResult, scope: PriceUpdateScope, ) -> None:
-        try:
-            run_info_range = self._snapshot.book.names[self.RUN_INFO_RANGE].refers_to_range
-            timestamp = get_formatted_datetime(datetime.now(), time_fmt=get_formatted_time_no_tz, )
-            message = (
-                f"updated {result.updated_rows} rows across "
-                f"{result.updated_symbols} of {result.total_symbols} symbols "
-                f"[{scope}]\n{timestamp}"
-            )
-            if result.failed:
-                message += f"\nFailed: {', '.join(result.failed)}"
-
-            _set_dv_message(run_info_range, self.DV_TITLE, message)
-
-            logger.info(
-                f"Updated Last Price for {result.updated_rows} row(s) across "
-                f"{result.updated_symbols} of {result.total_symbols} symbol(s) "
-                f"in {result.total_time:.1f}s"
-            )
-
-        except Exception as e:
-            logger.warning(
-                f"Could not write run summary to {self.RUN_INFO_RANGE}: {e}"
-            )

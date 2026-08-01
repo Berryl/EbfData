@@ -6,7 +6,7 @@ from xlwings import Sheet
 
 
 class PriceWriteVerificationError(Exception):
-    """Raised when a bulk Excel write cannot be verified."""
+    """Raised when a bulk Excel write-op cannot be verified."""
     pass
 
 
@@ -26,7 +26,7 @@ def find_verification_sample(
     -----------
     - Each list in symbol_to_indices is non-empty.
     - df_index labels are unique (get_loc returns an int).
-    - The integer stored in the indices lists are valid labels present in df_index.
+    - The integers stored in the indices lists are valid labels present in df_index.
     """
     for symbol, indices in symbol_to_indices.items():
         if not indices:  # defensive
@@ -50,7 +50,7 @@ def verify_column_write(
         tolerance: float | int = 0.001,
 ) -> None:
     """
-    Read back a single cell after a bulk column write and confirm the
+    Read back a single cell after a bulk column write-op and confirm the
     expected value landed. Raises PriceWriteVerificationError if it didn't.
 
     Args:
