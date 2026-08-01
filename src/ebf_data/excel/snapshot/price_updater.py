@@ -29,10 +29,10 @@ class SymbolPriceOutcome:
     One row's fetch outcome: the raw Symbol-column text, the fetched price
     (None on failure), and whether the fetch succeeded.
 
-    Kept separate from PriceUpdateResult (aggregate run stats) because a
-    workbook can have duplicate or suffixed symbols - e.g. two "PLTR" rows,
+    Kept separate from PriceUpdateResult (aggregate run stats). A
+    workbook can have duplicate or suffixed symbols (e.g., two "PLTR" rows,
     or "CCJ_17" / "CCJ_4.1" sharing a single fetch against base ticker
-    "CCJ" - that each need their own JSON entry carrying the raw text VBA
+    "CCJ"), and each will need their own JSON entry carrying the raw text VBA
     will match against the Symbol column.
     """
     symbol: str
