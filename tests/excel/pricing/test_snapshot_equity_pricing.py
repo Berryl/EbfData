@@ -66,7 +66,7 @@ class TestSnapshotPricingTable:
             Run update_prices() once for the whole class. Returns a tuple of
             (table, result) so benchmark and correctness tests share the same run.
             """
-            result: PriceUpdateResult = PriceUpdater(sut).update_prices()
+            result: PriceUpdateResult = PriceUpdater(sut).fetch_prices()
             sut.refresh()
             return sut, result
 
@@ -169,7 +169,7 @@ class TestSnapshotPricingTable:
 
         @pytest.fixture(scope="class")
         def visible_result(self, sut: SnapshotScenario_EquityPricing):
-            result: PriceUpdateResult = PriceUpdater(sut).update_prices(
+            result: PriceUpdateResult = PriceUpdater(sut).fetch_prices(
                 scope=PriceUpdateScope.VISIBLE
             )
             sut.refresh()
@@ -274,7 +274,7 @@ class TestSnapshotPricingTable:
             SnapshotScenario_EquityPricing, PriceUpdateResult]:
             """Select BA only, run the SELECTED scope."""
             self._select_ws_rows(sut, [self.BA_WS_ROW])
-            result: PriceUpdateResult = PriceUpdater(sut).update_prices(scope=PriceUpdateScope.SELECTED)
+            result: PriceUpdateResult = PriceUpdater(sut).fetch_prices(scope=PriceUpdateScope.SELECTED)
             sut.refresh()
             return sut, result
 
@@ -283,7 +283,7 @@ class TestSnapshotPricingTable:
             SnapshotScenario_EquityPricing, PriceUpdateResult]:
             """Select BA + CCJ_17 (non-contiguous in worksheet), run SELECTED scope."""
             self._select_ws_rows(sut, [self.BA_WS_ROW, self.CCJ_WS_ROW])
-            result: PriceUpdateResult = PriceUpdater(sut).update_prices(scope=PriceUpdateScope.SELECTED)
+            result: PriceUpdateResult = PriceUpdater(sut).fetch_prices(scope=PriceUpdateScope.SELECTED)
             sut.refresh()
             return sut, result
 
@@ -355,7 +355,7 @@ class TestSnapshotPricingTable:
 
         # @pytest.mark.skip(reason="run on demand only")
         def test_not_sure_yet(self, sut_with_bad_symbol):
-            PriceUpdater(sut_with_bad_symbol).update_prices()
+            PriceUpdater(sut_with_bad_symbol).fetch_prices()
 
 @pytest.mark.skip(reason="run on demand only")
 class TestEquityRunWithLogging:
@@ -363,7 +363,7 @@ class TestEquityRunWithLogging:
 
         sut = SnapshotScenario_EquityPricing()
         with caplog.at_level(logging.DEBUG):
-            PriceUpdater(sut).update_prices()
+            PriceUpdater(sut).fetch_prices()
         if caplog.text.strip():
             print("\n----- PriceUpdater log output -----")
             print(caplog.text)

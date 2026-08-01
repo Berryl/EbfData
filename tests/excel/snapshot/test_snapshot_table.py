@@ -45,13 +45,13 @@ class TestSnapshotTable:
     @pytest.mark.skip(reason="run on demand only")
     class TestPricing:
         def test_can_get_pricing(self, sut: SnapshotTable):
-            PriceUpdater(sut).update_prices()
+            PriceUpdater(sut).fetch_prices()
 
     @pytest.mark.skip(reason="run on demand only")
     class TestEquityRunWithLogging:
         def test_can_run_with_logging(self, sut: SnapshotTable, caplog):
             with caplog.at_level(logging.DEBUG):
-                PriceUpdater(sut).update_prices()
+                PriceUpdater(sut).fetch_prices()
             if caplog.text.strip():
                 print("\n----- PriceUpdater log output -----")
                 print(caplog.text)
