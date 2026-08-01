@@ -66,9 +66,8 @@ class PriceUpdater:
         self._snapshot = snapshot
         self._fetcher = fetcher or YFinanceFetcher()
 
-    def fetch_prices(
-        self, scope: PriceUpdateScope = PriceUpdateScope.ALL
-    ) -> tuple[PriceUpdateResult, list[SymbolPriceOutcome]]:
+    def fetch_prices(self, scope: PriceUpdateScope = PriceUpdateScope.ALL) -> tuple[
+        PriceUpdateResult, list[SymbolPriceOutcome]]:
         """
         Fetch current prices for snapshot rows in the given scope.
 
