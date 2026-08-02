@@ -1,11 +1,6 @@
 """
 Unit tests for PriceUpdater.fetch_prices().
 
-These cover ALL-scope fetching with test doubles for the snapshot table and
-price fetcher - no live Excel connection required, so no scenario workbook
-is involved and no production workbook risk applies. SELECTED and VISIBLE
-scope depend on real Application.Selection / SpecialCells COM behavior and
-belong in a separate integration suite against the scenario workbook.
 """
 import pandas as pd
 

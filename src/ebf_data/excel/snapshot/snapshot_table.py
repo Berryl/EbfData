@@ -25,8 +25,16 @@ CLEARED_SHORT_CALL_COLUMNS = [
 
 class SnapshotTable(xlTable):
     SYMBOL_COLUMN = "Symbol"
-    POSITION_COLUMN = "Position"
     LAST_PRICE_COLUMN = "Last Price"
+    POSITION_COLUMN = "Position"
+    LC_SYMBOL_COLUMN = "LC Symbol"
+    LP_SYMBOL_COLUMN = "LP Symbol"
+    SC_SYMBOL_COLUMN = "SC Symbol"
+    SP_SYMBOL_COLUMN = "SP Symbol"
+    LC_BID_COLUMN = "LC Current Value"
+    LP_BID_COLUMN = "LP Current Value"
+    SC_ASK_COLUMN = "SC Current Ask"
+    SP_ASK_COLUMN = "SP Current Ask"
 
     def __init__(self) -> None:
         super().__init__(find_open_book(SNAPSHOT_WB), SNAPSHOT_WKS, SNAPSHOT_TABLE)

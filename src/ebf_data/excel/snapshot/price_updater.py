@@ -4,13 +4,12 @@ Price fetcher for snapshot positions.
 """
 import logging
 import time
-from dataclasses import dataclass
 from enum import StrEnum, auto
 
 import pandas as pd
 
 from ebf_data.excel.infrastructure.table_helpers import get_data_body_column
-from ebf_data.excel.pricing.price_fetcher import PriceFetcher, PriceUpdateResult
+from ebf_data.excel.pricing.price_fetcher import PriceFetcher, PriceUpdateResult, SymbolPriceOutcome
 from ebf_data.excel.pricing.yfinance_fetcher import YFinanceFetcher
 from ebf_data.excel.snapshot.snapshot_table import SnapshotTable
 
@@ -21,23 +20,6 @@ class PriceUpdateScope(StrEnum):
     ALL = auto()  # all active positions (as determined by the Position being non-blank)
     SELECTED = auto()  # rows intersecting the current Excel selection & Symbol column
     VISIBLE = auto()  # rows not hidden by an active filter
-
-
-@dataclass(frozen=True)
-class SymbolPriceOutcome:
-    """
-    One row's fetch outcome: the raw Symbol-column text, the fetched price
-    (None on failure), and whether the fetch succeeded.
-
-    Kept separate from PriceUpdateResult (aggregate run stats). A
-    workbook can have duplicate or suffixed symbols (e.g., two "PLTR" rows,
-    or "CCJ_17" / "CCJ_4.1" sharing a single fetch against base ticker
-    "CCJ"), and each will need their own JSON entry carrying the raw text VBA
-    will match against the Symbol column.
-    """
-    symbol: str
-    price: float | None
-    success: bool
 
 
 # region helpers
