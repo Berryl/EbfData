@@ -36,19 +36,19 @@ class TestYFinanceOptionFetcher:
             assert result == {"INVALID1": None, "NOT-AN-OCC": None, "SPY": None, }
 
         def test_a_symbol_without_a_matching_contract_returns_none(self, sut):
-            occ = "AAPL250117C00150000"
-            yf_symbol = sc.to_symbol(sc.to_option(occ))
+            occ_target = "AAPL250117C00150000"
+            occ_available = "AAPL250117C00200000"
 
-            # Chain contains a different contract
-            calls = make_chain_df(["AAPL250117C00200000"], [5.0])
+            # Chain contains a different contract than what we wanted
+            calls = make_chain_df([occ_available], [5.0])
             puts = make_chain_df([], [])
             mock_chain = MagicMock(calls=calls, puts=puts)
 
             with patch("ebf_data.excel.pricing.yfinance_option_fetcher.yf.Ticker") as mock_ticker_cls:
                 mock_ticker_cls.return_value.option_chain.return_value = mock_chain
-                result = sut.fetch_ask_prices([occ])
+                result = sut.fetch_ask_prices([occ_target])
 
-            assert result == {occ: None}
+            assert result == {occ_target: None}
 
         def test_nan_ask_becomes_none(self, sut):
             occ = "AAPL250117C00150000"
