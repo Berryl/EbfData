@@ -76,7 +76,7 @@ class YFinanceOptionFetcher(OptionPriceFetcher):
                     match = all_contracts[all_contracts["contractSymbol"] == yf_symbol]  # type: ignore[index]
 
                     if match.empty:
-                        logger.warning(f"No contract found in chain for {occ!r}(yfinance symbol {yf_symbol!r})")
+                        logger.warning(f"No contract found in chain for {occ!r} (yfinance symbol {yf_symbol!r})")
                         result[occ] = None
                         continue
 

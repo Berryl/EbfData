@@ -207,7 +207,6 @@ class TestYFinanceOptionFetcher:
                 assert occ1_quote.ask_price == Money.mint(2.10)
                 assert occ2_quote.ask_price == Money.mint(4.50)
 
-
     class TestFetchAskPrices:
 
         def test_return_is_float_when_success(self, sut):
@@ -227,7 +226,6 @@ class TestYFinanceOptionFetcher:
         def test_return_is_none_when_failure(self, sut):
             result = sut.fetch_ask_prices(["GARBAGE"])
             assert result == {"GARBAGE": None}
-
 
     class TestFetchBidPrices:
 
