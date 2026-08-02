@@ -68,7 +68,7 @@ class YFinanceOptionFetcher(OptionPriceFetcher):
                 for occ in group_symbols:
                     contract = symbol_to_contract[occ]
                     yf_symbol = sc.to_symbol(contract)  # default = unpadded OCC
-                    match = all_contracts[all_contracts["contractSymbol"] == yf_symbol]
+                    match = all_contracts[all_contracts["contractSymbol"] == yf_symbol] # type: ignore[index]
 
                     if match.empty:
                         logger.warning(f"No contract found in chain for {occ!r} (yfinance symbol {yf_symbol!r})")
