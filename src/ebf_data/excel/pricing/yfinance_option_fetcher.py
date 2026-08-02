@@ -76,10 +76,7 @@ class YFinanceOptionFetcher(OptionPriceFetcher):
                     match = all_contracts[all_contracts["contractSymbol"] == yf_symbol]  # type: ignore[index]
 
                     if match.empty:
-                        logger.warning(
-                            f"No contract found in chain for {occ!r} "
-                            f"(yfinance symbol {yf_symbol!r})"
-                        )
+                        logger.warning(f"No contract found in chain for {occ!r}(yfinance symbol {yf_symbol!r})")
                         result[occ] = None
                         continue
 
@@ -115,26 +112,3 @@ class YFinanceOptionFetcher(OptionPriceFetcher):
                     result[occ] = None
 
         return result
-
-    def fetch_ask_prices(self, occ_symbols: list[str]) -> dict[str, float | None]:
-        """
-        Convenience wrapper – returns only the ask price (as float)
-        for backward compatibility.
-        """
-        quotes = self.fetch_quotes(occ_symbols)
-        return {
-            occ: (float(q.ask_price.amount) if q is not None else None)
-            for occ, q in quotes.items()
-        }
-
-    def fetch_bid_prices(self, occ_symbols: list[str]) -> dict[str, float | None]:
-        """
-        Convenience wrapper – returns only the bid price (as float)
-        for backward compatibility.
-        """
-        quotes = self.fetch_quotes(occ_symbols)
-        return {
-            occ: (float(q.bid_price.amount) if q is not None else None)
-            for occ, q in quotes.items()
-        }
-

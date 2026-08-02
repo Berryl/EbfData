@@ -6,34 +6,43 @@ from decimal import InvalidOperation
 
 import pandas as pd
 from ebf_domain.money.money import Money, to_money
+from ebf_trading.domain.value_objects.quotes.quote import Quote
 
 
 class OptionPriceFetcher(ABC):
     """
-    Base class for anything that can fetch current ask prices for a list
-    of OCC option symbols. Subclass and implement fetch_ask_prices() to
-    provide a concrete options price source.
+    Base class for anything that can fetch current prices for a list of OCC option symbols.
     """
 
     @abstractmethod
+    def fetch_quotes(self, occ_symbols: list[str]) -> dict[str, Quote | None]:
+        """
+        Fetch Level-1 quotes for the given OCC option symbols.
+
+        Returns a dict keyed by the exact OCC strings that were passed in.
+        A None value means no usable quote could be obtained for that symbol.
+        """
+        ...
+
     def fetch_ask_prices(self, occ_symbols: list[str]) -> dict[str, float | None]:
         """
-        Fetch current ask prices for the given OCC option symbols.
-
-        Returns a dict keyed by OCC symbol. A None value means the price
-        could not be determined for that symbol.
+        Convenience wrapper – returns only the ask price (as float).
         """
-        ...
+        quotes = self.fetch_quotes(occ_symbols)
+        return {
+            occ: (float(q.ask_price.amount) if q is not None else None)
+            for occ, q in quotes.items()
+        }
 
-    @abstractmethod
     def fetch_bid_prices(self, occ_symbols: list[str]) -> dict[str, float | None]:
         """
-        Fetch current bid prices for the given OCC option symbols.
-
-        Returns a dict keyed by OCC symbol. A None value means the price
-        could not be determined for that symbol.
+        Convenience wrapper – returns only the bid price (as float).
         """
-        ...
+        quotes = self.fetch_quotes(occ_symbols)
+        return {
+            occ: (float(q.bid_price.amount) if q is not None else None)
+            for occ, q in quotes.items()
+        }
 
     @staticmethod
     def _to_money(value) -> Money | None:
