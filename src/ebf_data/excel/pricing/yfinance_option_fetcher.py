@@ -2,11 +2,10 @@
 YFinance implementation of OptionPriceFetcher.
 """
 import logging
-from decimal import InvalidOperation
 
 import pandas as pd
 import yfinance as yf
-from ebf_domain.money.money import Money, to_money
+from ebf_domain.money.money import Money
 from ebf_trading.domain.date_time.market_days import get_timestamp
 from ebf_trading.domain.value_objects.option_specific.option import Option
 from ebf_trading.domain.value_objects.option_specific.symbol_conversion import symbol_converter as sc
@@ -128,11 +127,14 @@ class YFinanceOptionFetcher(OptionPriceFetcher):
             for occ, q in quotes.items()
         }
 
-    @staticmethod
-    def _to_money(value) -> Money | None:
-        if value is None or pd.isna(value):
-            return None
-        try:
-            return to_money(value)
-        except (ValueError, TypeError, InvalidOperation, ArithmeticError):
-            return None
+    def fetch_bid_prices(self, occ_symbols: list[str]) -> dict[str, float | None]:
+        """
+        Convenience wrapper – returns only the bid price (as float)
+        for backward compatibility.
+        """
+        quotes = self.fetch_quotes(occ_symbols)
+        return {
+            occ: (float(q.bid_price.amount) if q is not None else None)
+            for occ, q in quotes.items()
+        }
+
