@@ -1,4 +1,3 @@
-# tests/test_yfinance_option_fetcher.py
 from unittest.mock import MagicMock, patch
 
 import pandas as pd
@@ -40,18 +39,14 @@ def sut() -> OptionPriceFetcher:
 class TestFetchQuotes:
     class TestUnsuccessfulConditions:
 
-        def test_empty_list_returns_empty_dict(self, sut):
+        def test_when_passed_an_empty_list_the_return_is_an_empty_dict(self, sut):
             assert sut.fetch_quotes([]) == {}
 
-        def test_unparseable_symbols_become_none(self, sut):
+        def test_unparseable_symbols_are_valued_as_none(self, sut):
             result = sut.fetch_quotes(["INVALID1", "NOT-AN-OCC", "SPY"])
-            assert result == {
-                "INVALID1": None,
-                "NOT-AN-OCC": None,
-                "SPY": None,
-            }
+            assert result == {"INVALID1": None, "NOT-AN-OCC": None, "SPY": None}
 
-        def test_no_matching_contract_returns_none(self, sut):
+        def test_a_symbol_without_a_matching_contract_returns_none(self, sut):
             occ_target = "AAPL250117C00150000"
             occ_available = "AAPL250117C00200000"
 
@@ -65,7 +60,7 @@ class TestFetchQuotes:
 
             assert result == {occ_target: None}
 
-        def test_both_bid_and_ask_missing_returns_none(self, sut):
+        def test_when_both_bid_and_ask__are_missing__then_return_is_none(self, sut):
             occ = "AAPL250117C00150000"
             yf_symbol = sc.to_symbol(sc.to_option(occ))
 
@@ -79,7 +74,7 @@ class TestFetchQuotes:
 
             assert result == {occ: None}
 
-        def test_option_chain_exception_sets_whole_group_to_none(self, sut):
+        def test_an_option_chain_exception_sets_the_whole_group_to_none(self, sut):
             symbols = ["AAPL250117C00150000", "AAPL250117P00150000"]
 
             with patch("ebf_data.excel.pricing.yfinance_option_fetcher.yf.Ticker") as mock_ticker_cls:
@@ -120,7 +115,7 @@ class TestFetchQuotes:
             assert quote.ask_size == 0
             mock_ticker.option_chain.assert_called_once_with("2025-01-17")
 
-        def test_only_bid_missing_uses_zero(self, sut):
+        def test_when_only_the_bid_is_missing_then_the_bid_is_zero(self, sut):
             occ = "AAPL250117C00150000"
             yf_symbol = sc.to_symbol(sc.to_option(occ))
 
@@ -137,7 +132,7 @@ class TestFetchQuotes:
             assert quote.bid_price == Money.zero()
             assert quote.ask_price == Money.mint(2.50)
 
-        def test_only_ask_missing_uses_zero(self, sut):
+        def test_when_only_the_ask_is_missing_then_the_ask_is_zero(self, sut):
             occ = "AAPL250117C00150000"
             yf_symbol = sc.to_symbol(sc.to_option(occ))
 
@@ -154,7 +149,7 @@ class TestFetchQuotes:
             assert quote.bid_price == Money.mint(1.75)
             assert quote.ask_price == Money.zero()
 
-        def test_puts_and_calls_in_same_chain(self, sut):
+        def test_can_fetch_puts_and_calls_in_same_chain(self, sut):
             call_occ = "AAPL250117C00150000"
             put_occ = "AAPL250117P00150000"
 
@@ -169,35 +164,41 @@ class TestFetchQuotes:
                 mock_ticker_cls.return_value.option_chain.return_value = mock_chain
                 result = sut.fetch_quotes([call_occ, put_occ])
 
-            assert result[call_occ].ask_price == Money.mint(3.25)
-            assert result[put_occ].ask_price == Money.mint(2.80)
+            call_quote = result[call_occ]
+            put_quote = result[put_occ]
 
-        def test_multiple_underlyings(self, sut):
-            occ_aapl = "AAPL250117C00150000"
-            occ_msft = "MSFT250117C00400000"
+            assert call_quote is not None
+            assert put_quote is not None
 
-            yf_aapl = sc.to_symbol(sc.to_option(occ_aapl))
-            yf_msft = sc.to_symbol(sc.to_option(occ_msft))
+            assert call_quote.ask_price == Money.mint(3.25)
+            assert put_quote.ask_price == Money.mint(2.80)
 
-            chain_aapl = MagicMock(
-                calls=make_chain_df([yf_aapl], asks=[2.10], bids=[2.00]),
+        def test_can_fetch_multiple_underlying_tickers(self, sut):
+            occ1 = "AAPL250117C00150000"
+            occ2 = "MSFT250117C00400000"
+
+            yf1 = sc.to_symbol(sc.to_option(occ1))
+            yf2 = sc.to_symbol(sc.to_option(occ2))
+
+            chain1 = MagicMock(
+                calls=make_chain_df([yf1], asks=[2.10], bids=[2.00]),
                 puts=make_chain_df([]),
             )
-            chain_msft = MagicMock(
-                calls=make_chain_df([yf_msft], asks=[4.50], bids=[4.40]),
+            chain2 = MagicMock(
+                calls=make_chain_df([yf2], asks=[4.50], bids=[4.40]),
                 puts=make_chain_df([]),
             )
 
             def ticker_factory(ticker: str):
                 mock = MagicMock()
-                mock.option_chain.return_value = chain_aapl if ticker == "AAPL" else chain_msft
+                mock.option_chain.return_value = chain1 if ticker == "AAPL" else chain2
                 return mock
 
             with patch("ebf_data.excel.pricing.yfinance_option_fetcher.yf.Ticker", side_effect=ticker_factory):
-                result = sut.fetch_quotes([occ_aapl, occ_msft])
+                result = sut.fetch_quotes([occ1, occ2])
 
-            assert result[occ_aapl].ask_price == Money.mint(2.10)
-            assert result[occ_msft].ask_price == Money.mint(4.50)
+            assert result[occ1].ask_price == Money.mint(2.10)
+            assert result[occ2].ask_price == Money.mint(4.50)
 
 
 class TestFetchAskPrices:
