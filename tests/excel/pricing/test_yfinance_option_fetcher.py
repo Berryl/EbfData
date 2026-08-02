@@ -197,8 +197,14 @@ class TestFetchQuotes:
             with patch("ebf_data.excel.pricing.yfinance_option_fetcher.yf.Ticker", side_effect=ticker_factory):
                 result = sut.fetch_quotes([occ1, occ2])
 
-            assert result[occ1].ask_price == Money.mint(2.10)
-            assert result[occ2].ask_price == Money.mint(4.50)
+            occ1_quote = result[occ1]
+            occ2_quote = result[occ2]
+
+            assert occ1_quote is not None
+            assert occ2_quote is not None
+
+            assert occ1_quote.ask_price == Money.mint(2.10)
+            assert occ2_quote.ask_price == Money.mint(4.50)
 
 
 class TestFetchAskPrices:
