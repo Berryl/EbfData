@@ -5,11 +5,7 @@ import pytest
 from ebf_data.excel.pricing.yfinance_fetcher import YFinanceFetcher
 
 
-@pytest.fixture
-def sut() -> YFinanceFetcher:
-    return YFinanceFetcher()
-
-
+# region helpers
 def make_fast_info(**kwargs) -> MagicMock:
     info = MagicMock()
     # Support both attribute and .get() access
@@ -26,7 +22,7 @@ def make_download_df(tickers: list[str], closes: dict[str, list[float | None]]) 
         return pd.DataFrame({"Close": closes[t]})
 
     # MultiIndex columns: (ticker, OHLCV)
-    columns = pd.MultiIndex.from_product([tickers, ["Open", "High", "Low", "Close", "Volume"]])
+    pd.MultiIndex.from_product([tickers, ["Open", "High", "Low", "Close", "Volume"]])
     data = {}
     length = max(len(v) for v in closes.values())
 
@@ -48,11 +44,14 @@ def make_ticker_that_raises():
     m = MagicMock()
     type(m).fast_info = PropertyMock(side_effect=RuntimeError("fast_info failed"))
     return m
+# endregion
 
 
 class TestYFinanceFetcher:
 
-    # ... keep the successful primary-path tests as they were ...
+    @pytest.fixture(scope="module")
+    def sut(self) -> YFinanceFetcher:
+        return YFinanceFetcher()
 
     class TestPrimaryPathFastInfo:
 
@@ -107,14 +106,14 @@ class TestYFinanceFetcher:
             assert result["AAPL"] == 150.0
             assert result["BAD"] is None
 
-@pytest.mark.integration
-class TestLiveIntegration:
-    def test_can_fetch_live_data(self, sut):
-        """Hit real Yahoo Finance – run manually when you want to check connectivity."""
-        result = sut.fetch_prices(["AAPL", "MSFT", "INVALIDTICKERXYZ"])
+    @pytest.mark.skip("run on demand")
+    class TestLiveIntegration:
+        def test_can_fetch_live_data(self, sut):
+            """Hit real Yahoo Finance – run manually when you want to check connectivity."""
+            result = sut.fetch_prices(["AAPL", "MSFT", "INVALID-TICKER-XYZ"])
 
-        assert result["AAPL"] is not None and result["AAPL"] > 0
-        assert result["MSFT"] is not None and result["MSFT"] > 0
-        assert result["INVALIDTICKERXYZ"] is None
+            assert result["AAPL"] is not None and result["AAPL"] > 0
+            assert result["MSFT"] is not None and result["MSFT"] > 0
+            assert result["INVALID-TICKER-XYZ"] is None
 
-        print("Live prices:", result)  # handy when running manually
+            print("Live prices:", result)  # handy when running manually

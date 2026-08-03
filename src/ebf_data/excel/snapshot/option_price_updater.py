@@ -14,7 +14,7 @@ from ebf_data.excel.snapshot.snapshot_table import SnapshotTable
 
 logger = logging.getLogger(__name__)
 
-AskOrBid = Literal["ask", "bid"]
+BidOrAsk = Literal["ask", "bid"]
 
 
 class OptionPriceUpdater:
@@ -29,102 +29,111 @@ class OptionPriceUpdater:
     LC_SYMBOL_COLUMN = SnapshotTable.LC_SYMBOL_COLUMN
     LP_SYMBOL_COLUMN = SnapshotTable.LP_SYMBOL_COLUMN
 
-    def __init__(self, snapshot: SnapshotTable, fetcher: OptionPriceFetcher | None = None) -> None:
+    def __init__(self, snapshot: SnapshotTable,fetcher: OptionPriceFetcher | None = None) -> None:
         self._snapshot = snapshot
         self._fetcher = fetcher or YFinanceOptionFetcher()
 
-    # region Public API
     def fetch_short_call_prices(self) -> tuple[PriceUpdateResult, list[SymbolPriceOutcome]]:
-        """Ask prices for active short call rows."""
-        return self._fetch_option_prices(self.SC_SYMBOL_COLUMN, side="ask")
+        return self.fetch_all_option_prices()["short_call"]
 
     def fetch_short_put_prices(self) -> tuple[PriceUpdateResult, list[SymbolPriceOutcome]]:
-        """Ask prices for active short-put rows."""
-        return self._fetch_option_prices(self.SP_SYMBOL_COLUMN, side="ask")
+        return self.fetch_all_option_prices()["short_put"]
 
     def fetch_long_call_prices(self) -> tuple[PriceUpdateResult, list[SymbolPriceOutcome]]:
-        """Bid prices for active long call rows."""
-        return self._fetch_option_prices(self.LC_SYMBOL_COLUMN, side="bid")
+        return self.fetch_all_option_prices()["long_call"]
 
     def fetch_long_put_prices(self) -> tuple[PriceUpdateResult, list[SymbolPriceOutcome]]:
-        """Bid prices for active long put rows."""
-        return self._fetch_option_prices(self.LP_SYMBOL_COLUMN, side="bid")
+        return self.fetch_all_option_prices()["long_put"]
 
-    # endregion
+    def fetch_all_option_prices(self) -> dict[str, tuple[PriceUpdateResult, list[SymbolPriceOutcome]]]:
+        """
+        Fetch prices for all four option sides in a single pass.
 
-    # region Internal
-    def _fetch_option_prices(
-            self, symbol_column: str, *, side: AskOrBid
-    ) -> tuple[PriceUpdateResult, list[SymbolPriceOutcome]]:
+        Returns a dict keyed by side name:
+            {
+                "short_call": (PriceUpdateResult, list[SymbolPriceOutcome]),
+                "short_put":  (...),
+                "long_call":  (...),
+                "long_put":   (...),
+            }
+        """
         t0 = time.monotonic()
-        result = PriceUpdateResult()
-
         self._snapshot.refresh()
         df = self._snapshot.df
 
-        active_rows = df[df[symbol_column].notna() & (df[symbol_column] != "")]
-        if active_rows.empty:
-            logger.info(f"No active rows found for {symbol_column}")
-            result.total_time = time.monotonic() - t0
-            return result, []
+        sides: dict[str, tuple[str, BidOrAsk]] = {
+            "short_call": (self.SC_SYMBOL_COLUMN, "ask"),
+            "short_put":  (self.SP_SYMBOL_COLUMN, "ask"),
+            "long_call":  (self.LC_SYMBOL_COLUMN, "bid"),
+            "long_put":   (self.LP_SYMBOL_COLUMN, "bid"),
+        }
 
-        # Collect unique OCC symbols and the rows that use them
-        symbol_to_indices: dict[str, list[int]] = {}
-        valid_symbols: list[str] = []
+        # 1. Collect symbols + row indices per side
+        side_data: dict[str, dict[str, list[int]]] = {}
+        all_symbols: set[str] = set()
 
-        for idx, row in active_rows.iterrows():
-            occ = str(row[symbol_column]).strip()
-            try:
-                sc.to_option(occ)  # validate only
-            except ValueError as e:
-                logger.warning(f"Skipping unparseable OCC symbol {occ!r}: {e}")
-                continue
+        for side_name, (col, _) in sides.items():
+            symbol_to_indices: dict[str, list[int]] = {}
 
-            if occ not in symbol_to_indices:
-                valid_symbols.append(occ)
-            symbol_to_indices.setdefault(occ, []).append(idx)
+            if col in df.columns:
+                active = df[df[col].notna() & (df[col] != "")]
+                for idx, row in active.iterrows():
+                    occ = str(row[col]).strip()
+                    try:
+                        sc.to_option(occ)  # validate
+                    except ValueError as e:
+                        logger.warning(f"Skipping unparseable OCC symbol {occ!r}: {e}")
+                        continue
 
-        if not valid_symbols:
-            logger.info(f"No parseable symbols found for {symbol_column}")
-            result.total_time = time.monotonic() - t0
-            return result, []
+                    symbol_to_indices.setdefault(occ, []).append(idx)
+                    all_symbols.add(occ)
 
-        result.total_symbols = len(valid_symbols)
-        logger.info(f"Fetching {side} prices for {result.total_symbols} contract(s) [{symbol_column}]")
+            side_data[side_name] = symbol_to_indices
 
+        # 2. Single network call
         t1 = time.monotonic()
-        quotes = self._fetcher.fetch_quotes(valid_symbols)  # ← one call, full quotes
-        result.price_fetching_time = time.monotonic() - t1
+        quotes = self._fetcher.fetch_quotes(list(all_symbols)) if all_symbols else {}
+        fetch_time = time.monotonic() - t1
 
-        failed_symbols: list[str] = []
-        outcomes: list[SymbolPriceOutcome] = []
+        # 3. Build results per side
+        results: dict[str, tuple[PriceUpdateResult, list[SymbolPriceOutcome]]] = {}
 
-        for occ, indices in symbol_to_indices.items():
-            quote = quotes.get(occ)
-            price: float | None = None
+        for side_name, (col, price_side) in sides.items():
+            result = PriceUpdateResult()
+            outcomes: list[SymbolPriceOutcome] = []
+            failed: list[str] = []
 
-            if quote is not None:
-                money = quote.ask_price if side == "ask" else quote.bid_price
-                price = float(money.amount)
+            symbol_to_indices = side_data[side_name]
+            result.total_symbols = len(symbol_to_indices)
+            result.price_fetching_time = fetch_time
 
-            success = price is not None
-            if not success:
-                logger.warning(f"No {side} price available for {occ}")
-                failed_symbols.append(occ)
+            for occ, indices in symbol_to_indices.items():
+                quote = quotes.get(occ)
+                price: float | None = None
 
-            for idx in indices:
-                raw_symbol = str(df.loc[idx, symbol_column])  # noqa type: ignore[arg-type]
-                outcomes.append(
-                    SymbolPriceOutcome(symbol=raw_symbol, price=price, success=success)
+                if quote is not None:
+                    money = quote.ask_price if price_side == "ask" else quote.bid_price
+                    price = float(money.amount)
+
+                success = price is not None
+                if not success:
+                    logger.warning(f"No {price_side} price available for {occ}")
+                    failed.append(occ)
+
+                for idx in indices:
+                    raw_symbol = str(df.loc[idx, col])
+                    outcomes.append(
+                        SymbolPriceOutcome(symbol=raw_symbol, price=price, success=success)
+                    )
+
+            result.failed = failed
+            result.total_time = time.monotonic() - t0
+            results[side_name] = (result, outcomes)
+
+            if result.total_symbols:
+                logger.info(
+                    f"[{side_name}] {result.updated_symbols}/{result.total_symbols} "
+                    f"updated in {result.total_time:.1f}s"
                 )
 
-        result.failed = failed_symbols
-        result.total_time = time.monotonic() - t0
-
-        logger.info(
-            f"Fetched {side} prices for {len(valid_symbols) - len(failed_symbols)} of "
-            f"{len(valid_symbols)} contract(s) in {result.total_time:.1f}s"
-        )
-
-        return result, outcomes
-    # endregion
+        return results
