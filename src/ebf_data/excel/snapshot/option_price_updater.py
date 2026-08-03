@@ -15,7 +15,7 @@ from ebf_data.excel.snapshot.snapshot_table import SnapshotTable
 
 logger = logging.getLogger(__name__)
 
-PriceSide = Literal["ask", "bid"]
+BidOrAsk = Literal["ask", "bid"]
 
 
 class OptionType(StrEnum):
@@ -26,7 +26,7 @@ class OptionType(StrEnum):
 
 
 def get_outcomes(
-        results: dict[OptionType, tuple[PriceUpdateResult, list[SymbolPriceOutcome]]],t: OptionType | None = None,
+        results: dict[OptionType, tuple[PriceUpdateResult, list[SymbolPriceOutcome]]], t: OptionType | None = None,
 ) -> list[SymbolPriceOutcome]:
     """
     Extract outcomes for one option type or for all types when *t* is None.
@@ -68,66 +68,64 @@ class OptionPriceUpdater:
     def fetch_long_put_prices(self) -> tuple[PriceUpdateResult, list[SymbolPriceOutcome]]:
         return self.fetch_all_option_prices()[OptionType.LONG_PUT]
 
-    def fetch_all_option_prices(
-        self,
-    ) -> dict[OptionType, tuple[PriceUpdateResult, list[SymbolPriceOutcome]]]:
+    def fetch_all_option_prices(self) -> dict[OptionType, tuple[PriceUpdateResult, list[SymbolPriceOutcome]]]:
         """
-        Fetch prices for all four option sides in a single pass.
+        Fetch prices for all four option types in a single pass.
 
-        Returns a dict keyed by OptionSide.
+        Returns a dict keyed by OptionType.
         """
         t0 = time.monotonic()
         self._snapshot.refresh()
         df = self._snapshot.df
 
-        sides: dict[OptionType, tuple[str, PriceSide]] = {
+        option_types: dict[OptionType, tuple[str, BidOrAsk]] = {
             OptionType.SHORT_CALL: (self.SC_SYMBOL_COLUMN, "ask"),
-            OptionType.SHORT_PUT:  (self.SP_SYMBOL_COLUMN, "ask"),
-            OptionType.LONG_CALL:  (self.LC_SYMBOL_COLUMN, "bid"),
-            OptionType.LONG_PUT:   (self.LP_SYMBOL_COLUMN, "bid"),
+            OptionType.SHORT_PUT: (self.SP_SYMBOL_COLUMN, "ask"),
+            OptionType.LONG_CALL: (self.LC_SYMBOL_COLUMN, "bid"),
+            OptionType.LONG_PUT: (self.LP_SYMBOL_COLUMN, "bid"),
         }
 
-        # 1. Collect symbols + row indices per side
-        side_data: dict[OptionType, dict[str, list[int]]] = {}
+        # 1. Collect symbols + row indices per option type
+        option_type_data: dict[OptionType, dict[str, list[int]]] = {}
         all_symbols: set[str] = set()
 
-        for side, (col, _) in sides.items():
+        for ot, (col, _) in option_types.items():
             symbol_to_indices: dict[str, list[int]] = {}
 
             if col in df.columns:
                 active = df[df[col].notna() & (df[col] != "")]
                 for idx, row in active.iterrows():
-                    occ = str(row[col]).strip()
+                    symbol = str(row[col]).strip()
                     try:
-                        sc.to_option(occ)
+                        sc.to_option(symbol)
                     except ValueError as e:
-                        logger.warning(f"Skipping unparseable OCC symbol {occ!r}: {e}")
+                        logger.warning(f"Skipping unparseable OCC symbol {symbol!r}: {e}")
                         continue
 
-                    symbol_to_indices.setdefault(occ, []).append(idx)
-                    all_symbols.add(occ)
+                    symbol_to_indices.setdefault(symbol, []).append(idx)
+                    all_symbols.add(symbol)
 
-            side_data[side] = symbol_to_indices
+            option_type_data[ot] = symbol_to_indices
 
         # 2. Single network call
         t1 = time.monotonic()
         quotes = self._fetcher.fetch_quotes(list(all_symbols)) if all_symbols else {}
         fetch_time = time.monotonic() - t1
 
-        # 3. Build results per side
+        # 3. Build results per ot
         results: dict[OptionType, tuple[PriceUpdateResult, list[SymbolPriceOutcome]]] = {}
 
-        for side, (col, price_side) in sides.items():
+        for ot, (col, price_side) in option_types.items():
             result = PriceUpdateResult()
             outcomes: list[SymbolPriceOutcome] = []
             failed: list[str] = []
 
-            symbol_to_indices = side_data[side]
+            symbol_to_indices = option_type_data[ot]
             result.total_symbols = len(symbol_to_indices)
             result.price_fetching_time = fetch_time
 
-            for occ, indices in symbol_to_indices.items():
-                quote = quotes.get(occ)
+            for symbol, indices in symbol_to_indices.items():
+                quote = quotes.get(symbol)
                 price: float | None = None
 
                 if quote is not None:
@@ -136,8 +134,8 @@ class OptionPriceUpdater:
 
                 success = price is not None
                 if not success:
-                    logger.warning(f"No {price_side} price available for {occ}")
-                    failed.append(occ)
+                    logger.warning(f"No {price_side} price available for {symbol}")
+                    failed.append(symbol)
 
                 for idx in indices:
                     raw_symbol = str(df.loc[idx, col])  # noqa type: ignore[arg-type]
@@ -147,11 +145,11 @@ class OptionPriceUpdater:
 
             result.failed = failed
             result.total_time = time.monotonic() - t0
-            results[side] = (result, outcomes)
+            results[ot] = (result, outcomes)
 
             if result.total_symbols:
                 logger.info(
-                    f"[{side}] {result.updated_symbols}/{result.total_symbols} "
+                    f"[{ot}] {result.updated_symbols}/{result.total_symbols} "
                     f"updated in {result.total_time:.1f}s"
                 )
 

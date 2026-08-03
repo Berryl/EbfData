@@ -5,7 +5,7 @@ import pytest
 from ebf_domain.money.money import Money
 from ebf_trading.domain.value_objects.quotes.quote import Quote
 
-from ebf_data.excel.snapshot.option_price_updater import OptionPriceUpdater
+from ebf_data.excel.snapshot.option_price_updater import OptionPriceUpdater, OptionType
 from ebf_data.excel.snapshot.snapshot_table import SnapshotTable
 
 
@@ -217,18 +217,18 @@ class TestOptionPriceUpdater:
             assert called == {sc_occ, sp_occ, lc_occ, lp_occ}
 
             # Shorts use ask
-            sc_result, sc_outcomes = results["short_call"]
+            sc_result, sc_outcomes = results[OptionType.SHORT_CALL]
             assert sc_outcomes[0].price == 1.25
             assert sc_result.total_symbols == 1
 
-            sp_result, sp_outcomes = results["short_put"]
+            sp_result, sp_outcomes = results[OptionType.SHORT_PUT]
             assert sp_outcomes[0].price == 0.95
 
             # Longs use bid
-            lc_result, lc_outcomes = results["long_call"]
+            lc_result, lc_outcomes = results[OptionType.LONG_CALL]
             assert lc_outcomes[0].price == 2.40
 
-            lp_result, lp_outcomes = results["long_put"]
+            lp_result, lp_outcomes = results[OptionType.LONG_PUT]
             assert lp_outcomes[0].price == 1.70
 
         def test_empty_workbook_returns_empty_results(self, sut, mock_snapshot, mock_fetcher):
@@ -237,8 +237,8 @@ class TestOptionPriceUpdater:
 
             results = sut.fetch_all_option_prices()
 
-            for side in ("short_call", "short_put", "long_call", "long_put"):
-                result, outcomes = results[side]
+            for t in (OptionType.SHORT_CALL,OptionType.SHORT_PUT, OptionType.LONG_CALL, OptionType.LONG_PUT):
+                result, outcomes = results[t]
                 assert result.total_symbols == 0
                 assert outcomes == []
 
