@@ -52,9 +52,9 @@ class OptionPriceUpdater:
         Returns a dict keyed by side name:
             {
                 "short_call": (PriceUpdateResult, list[SymbolPriceOutcome]),
-                "short_put":  (...),
-                "long_call":  (...),
-                "long_put":   (...),
+                "short_put": (...),
+                "long_call": (...),
+                "long_put": (...),
             }
         """
         t0 = time.monotonic()
@@ -121,7 +121,7 @@ class OptionPriceUpdater:
                     failed.append(occ)
 
                 for idx in indices:
-                    raw_symbol = str(df.loc[idx, col])
+                    raw_symbol = str(df.loc[idx, col])   # noqa type: ignore[arg-type]
                     outcomes.append(
                         SymbolPriceOutcome(symbol=raw_symbol, price=price, success=success)
                     )

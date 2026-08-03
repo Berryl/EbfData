@@ -9,7 +9,7 @@ from ebf_data.excel.snapshot.option_price_updater import OptionPriceUpdater
 from ebf_data.excel.snapshot.snapshot_table import SnapshotTable
 
 
-# region helpers & fixtures
+# region helpers
 def make_quote(symbol: str, bid: float, ask: float) -> Quote:
     return Quote(
         symbol=symbol,
@@ -29,30 +29,30 @@ def make_df(rows: list[dict], columns: list[str] | None = None) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-@pytest.fixture
-def mock_snapshot():
-    snap = MagicMock(spec=SnapshotTable)
-    snap.SC_SYMBOL_COLUMN = "SC Symbol"
-    snap.SP_SYMBOL_COLUMN = "SP Symbol"
-    snap.LC_SYMBOL_COLUMN = "LC Symbol"
-    snap.LP_SYMBOL_COLUMN = "LP Symbol"
-    return snap
-
-
-@pytest.fixture
-def mock_fetcher():
-    return MagicMock()
-
-
-@pytest.fixture
-def sut(mock_snapshot, mock_fetcher):
-    return OptionPriceUpdater(snapshot=mock_snapshot, fetcher=mock_fetcher)
-
-
 # endregion
 
 
 class TestOptionPriceUpdater:
+
+    # region fixtures
+    @pytest.fixture
+    def mock_snapshot(self):
+        snap = MagicMock(spec=SnapshotTable)
+        snap.SC_SYMBOL_COLUMN = "SC Symbol"
+        snap.SP_SYMBOL_COLUMN = "SP Symbol"
+        snap.LC_SYMBOL_COLUMN = "LC Symbol"
+        snap.LP_SYMBOL_COLUMN = "LP Symbol"
+        return snap
+
+    @pytest.fixture
+    def mock_fetcher(self):
+        return MagicMock()
+
+    @pytest.fixture
+    def sut(self, mock_snapshot, mock_fetcher):
+        return OptionPriceUpdater(snapshot=mock_snapshot, fetcher=mock_fetcher)
+    # endregion
+
     class TestWhenNoActiveRows:
 
         def test_when_dataframe_is_empty(self, sut, mock_snapshot):
