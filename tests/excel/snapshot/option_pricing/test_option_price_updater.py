@@ -184,3 +184,62 @@ class TestOptionPriceUpdater:
             assert set(called_with) == {occ1, occ2}
             assert result.total_symbols == 2
             assert len(outcomes) == 2
+
+    class TestFetchAllOptionPrices:
+
+        def test_can_update_all_options_in_a_single_call(self, sut, mock_snapshot, mock_fetcher):
+            """One fetch_quotes call should serve every side."""
+            sc_occ = "AAPL260918C00200000"
+            sp_occ = "AAPL260918P00180000"
+            lc_occ = "MSFT260918C00400000"
+            lp_occ = "MSFT260918P00350000"
+
+            mock_snapshot.df = make_df([
+                {"SC Symbol": sc_occ, "SP Symbol": None, "LC Symbol": None, "LP Symbol": None},
+                {"SC Symbol": None, "SP Symbol": sp_occ, "LC Symbol": None, "LP Symbol": None},
+                {"SC Symbol": None, "SP Symbol": None, "LC Symbol": lc_occ, "LP Symbol": None},
+                {"SC Symbol": None, "SP Symbol": None, "LC Symbol": None, "LP Symbol": lp_occ},
+            ])
+            mock_snapshot.refresh = MagicMock()
+
+            mock_fetcher.fetch_quotes.return_value = {
+                sc_occ: make_quote(sc_occ, bid=1.10, ask=1.25),
+                sp_occ: make_quote(sp_occ, bid=0.80, ask=0.95),
+                lc_occ: make_quote(lc_occ, bid=2.40, ask=2.60),
+                lp_occ: make_quote(lp_occ, bid=1.70, ask=1.85),
+            }
+
+            results = sut.fetch_all_option_prices()
+
+            # Only one network call
+            mock_fetcher.fetch_quotes.assert_called_once()
+            called = set(mock_fetcher.fetch_quotes.call_args[0][0])
+            assert called == {sc_occ, sp_occ, lc_occ, lp_occ}
+
+            # Shorts use ask
+            sc_result, sc_outcomes = results["short_call"]
+            assert sc_outcomes[0].price == 1.25
+            assert sc_result.total_symbols == 1
+
+            sp_result, sp_outcomes = results["short_put"]
+            assert sp_outcomes[0].price == 0.95
+
+            # Longs use bid
+            lc_result, lc_outcomes = results["long_call"]
+            assert lc_outcomes[0].price == 2.40
+
+            lp_result, lp_outcomes = results["long_put"]
+            assert lp_outcomes[0].price == 1.70
+
+        def test_empty_workbook_returns_empty_results(self, sut, mock_snapshot, mock_fetcher):
+            mock_snapshot.df = make_df([], columns=["SC Symbol", "SP Symbol", "LC Symbol", "LP Symbol"])
+            mock_snapshot.refresh = MagicMock()
+
+            results = sut.fetch_all_option_prices()
+
+            for side in ("short_call", "short_put", "long_call", "long_put"):
+                result, outcomes = results[side]
+                assert result.total_symbols == 0
+                assert outcomes == []
+
+            mock_fetcher.fetch_quotes.assert_not_called()
