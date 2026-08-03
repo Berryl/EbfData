@@ -28,6 +28,12 @@ class OptionPriceUpdater:
     SP_SYMBOL_COLUMN = SnapshotTable.SP_SYMBOL_COLUMN
     SP_ASK_COLUMN = SnapshotTable.SP_ASK_COLUMN
 
+    LC_SYMBOL_COLUMN = SnapshotTable.LC_SYMBOL_COLUMN
+    LC_BID_COLUMN = SnapshotTable.LC_BID_COLUMN
+
+    LP_SYMBOL_COLUMN = SnapshotTable.LP_SYMBOL_COLUMN
+    LP_BID_COLUMN = SnapshotTable.LP_BID_COLUMN
+
     def __init__(self, snapshot: SnapshotTable, fetcher: OptionPriceFetcher | None = None,) -> None:
         self._snapshot = snapshot
         self._fetcher = fetcher or YFinanceOptionFetcher()
@@ -40,15 +46,10 @@ class OptionPriceUpdater:
         """Fetch current ask prices for all active short put rows."""
         return self._fetch_short_option_prices(symbol_column=self.SP_SYMBOL_COLUMN)
 
-    def _fetch_short_option_prices(
-            self,
-            symbol_column: str,
-    ) -> tuple[PriceUpdateResult, list[SymbolPriceOutcome]]:
+    def _fetch_short_option_prices(self, symbol_column: str, ) -> tuple[PriceUpdateResult, list[SymbolPriceOutcome]]:
         """
         Fetch current ask prices for all active short option rows of a
-        given type. Driven by the symbol column name only now - callers
-        no longer supply a target column or run-info range, since this
-        class no longer writes to the workbook.
+        given type, determined from the symbol column name.
         """
         t0 = time.monotonic()
         result = PriceUpdateResult()

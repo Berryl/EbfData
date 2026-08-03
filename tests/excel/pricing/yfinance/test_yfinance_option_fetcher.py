@@ -246,3 +246,45 @@ class TestYFinanceOptionFetcher:
         def test_return_is_none_when_failure(self, sut):
             result = sut.fetch_bid_prices(["GARBAGE"])
             assert result == {"GARBAGE": None}
+
+class TestLiveIntegration:
+
+    @pytest.mark.integration
+    def test_live_option_quotes_smoke(self):
+        """
+        Hit real Yahoo Finance for a couple of liquid option contracts.
+        Run manually with: pytest -m integration -s
+        """
+        sut = YFinanceOptionFetcher()
+
+        # Use contracts that are very likely to exist (adjust dates if needed)
+        # Example: AAPL and SPY near-term calls – change the OCC strings to
+        # currently listed expirations if these have already expired.
+        symbols = [
+            "AMZN260918C00200000",  # AMZN 18-Sep-2026 200 Call
+            "INVALIDOCCSYMBOL123",  # should return None
+        ]
+
+        result = sut.fetch_quotes(symbols)
+
+        # Valid contracts should return a Quote with real prices
+        q1 = result["AMZN260918C00200000"]
+
+        assert q1 is not None
+        assert isinstance(q1.bid_price, Money)
+        assert isinstance(q1.ask_price, Money)
+        assert q1.bid_price.amount >= 0
+        assert q1.ask_price.amount >= 0
+
+        assert q1 is not None
+
+        # Invalid symbol must be None
+        assert result["INVALIDOCCSYMBOL123"] is None
+
+        # Helpful when running manually
+        print("\nLive option quotes:")
+        for sym, q in result.items():
+            if q:
+                print(f"  {sym}: bid={q.bid_price}  ask={q.ask_price}  last={q.last_price}")
+            else:
+                print(f"  {sym}: None")
