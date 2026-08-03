@@ -9,10 +9,7 @@ from ebf_data.excel.snapshot.option_price_updater import OptionPriceUpdater
 from ebf_data.excel.snapshot.snapshot_table import SnapshotTable
 
 
-# ---------------------------------------------------------------------------
-# Helpers / fixtures
-# ---------------------------------------------------------------------------
-
+# region helpers & fixtures
 def make_quote(symbol: str, bid: float, ask: float) -> Quote:
     return Quote(
         symbol=symbol,
@@ -24,6 +21,12 @@ def make_quote(symbol: str, bid: float, ask: float) -> Quote:
         last_price=None,
         last_size=None,
     )
+
+
+def make_df(rows: list[dict], columns: list[str] | None = None) -> pd.DataFrame:
+    if not rows and columns:
+        return pd.DataFrame(columns=columns)
+    return pd.DataFrame(rows)
 
 
 @pytest.fixture
@@ -46,20 +49,13 @@ def sut(mock_snapshot, mock_fetcher):
     return OptionPriceUpdater(snapshot=mock_snapshot, fetcher=mock_fetcher)
 
 
-def make_df(rows: list[dict], columns: list[str] | None = None) -> pd.DataFrame:
-    if not rows and columns:
-        return pd.DataFrame(columns=columns)
-    return pd.DataFrame(rows)
+# endregion
 
-
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
 
 class TestOptionPriceUpdater:
-    class TestNoActiveRows:
+    class TestWhenNoActiveRows:
 
-        def test_empty_dataframe(self, sut, mock_snapshot):
+        def test_when_dataframe_is_empty(self, sut, mock_snapshot):
             mock_snapshot.df = make_df([], columns=["SC Symbol"])
             mock_snapshot.refresh = MagicMock()
 
@@ -69,7 +65,7 @@ class TestOptionPriceUpdater:
             assert outcomes == []
             sut._fetcher.fetch_quotes.assert_not_called()
 
-        def test_all_blank_symbols(self, sut, mock_snapshot):
+        def test_when_no_symbols(self, sut, mock_snapshot):
             mock_snapshot.df = make_df([
                 {"SC Symbol": None},
                 {"SC Symbol": ""},
@@ -83,7 +79,7 @@ class TestOptionPriceUpdater:
 
     class TestShortCallsUsesAsk:
 
-        def test_happy_path(self, sut, mock_snapshot, mock_fetcher):
+        def test_when_no_failures(self, sut, mock_snapshot, mock_fetcher):
             occ = "AAPL260918C00200000"
             mock_snapshot.df = make_df([
                 {"SC Symbol": occ},
@@ -102,7 +98,7 @@ class TestOptionPriceUpdater:
             assert len(outcomes) == 2
             assert all(o.price == 1.45 and o.success for o in outcomes)
 
-        def test_missing_quote_becomes_failure(self, sut, mock_snapshot, mock_fetcher):
+        def test_when_failure(self, sut, mock_snapshot, mock_fetcher):
             occ = "AAPL260918C00200000"
             mock_snapshot.df = make_df([{"SC Symbol": occ}])
             mock_snapshot.refresh = MagicMock()
@@ -116,7 +112,7 @@ class TestOptionPriceUpdater:
 
     class TestLongCallsUsesBid:
 
-        def test_happy_path(self, sut, mock_snapshot, mock_fetcher):
+        def test_when_no_failures(self, sut, mock_snapshot, mock_fetcher):
             occ = "AAPL260918C00200000"
             mock_snapshot.df = make_df([{"LC Symbol": occ}])
             mock_snapshot.refresh = MagicMock()
@@ -132,7 +128,7 @@ class TestOptionPriceUpdater:
 
     class TestLongPutsUsesBid:
 
-        def test_happy_path(self, sut, mock_snapshot, mock_fetcher):
+        def test_when_no_failures(self, sut, mock_snapshot, mock_fetcher):
             occ = "AAPL260918P00180000"
             mock_snapshot.df = make_df([{"LP Symbol": occ}])
             mock_snapshot.refresh = MagicMock()
@@ -165,7 +161,7 @@ class TestOptionPriceUpdater:
             assert len(outcomes) == 1
             assert outcomes[0].symbol == good_occ
 
-    class TestMultipleDistinctSymbols:
+    class TestWithMultipleDistinctSymbols:
 
         def test_all_symbols_are_requested(self, sut, mock_snapshot, mock_fetcher):
             occ1 = "AAPL260918C00200000"

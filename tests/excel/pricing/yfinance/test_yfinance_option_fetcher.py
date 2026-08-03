@@ -33,7 +33,7 @@ def make_chain_df(
 
 class TestYFinanceOptionFetcher:
 
-    @pytest.fixture(scope="class")
+    @pytest.fixture(scope="module")
     def sut(self) -> OptionPriceFetcher:
         return YFinanceOptionFetcher()
 
@@ -262,7 +262,7 @@ class TestLiveIntegration:
         # currently listed expirations if these have already expired.
         symbols = [
             "AMZN260918C00200000",  # AMZN 18-Sep-2026 200 Call
-            "INVALIDOCCSYMBOL123",  # should return None
+            "INVALID-OCC-SYMBOL123",  # should return None
         ]
 
         result = sut.fetch_quotes(symbols)
@@ -279,7 +279,7 @@ class TestLiveIntegration:
         assert q1 is not None
 
         # Invalid symbol must be None
-        assert result["INVALIDOCCSYMBOL123"] is None
+        assert result["INVALID-OCC-SYMBOL123"] is None
 
         # Helpful when running manually
         print("\nLive option quotes:")
