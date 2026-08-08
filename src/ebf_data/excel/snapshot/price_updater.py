@@ -9,7 +9,8 @@ from enum import StrEnum, auto
 import pandas as pd
 
 from ebf_data.excel.infrastructure.table_helpers import get_data_body_column
-from ebf_data.excel.pricing.price_fetcher import PriceFetcher, PriceUpdateResult, SymbolPriceOutcome
+from ebf_data.excel.pricing.price_fetcher import PriceFetcher
+from ebf_data.excel.pricing.pricing_helpers import PriceUpdateResult, SymbolPriceOutcome
 from ebf_data.excel.pricing.yfinance_fetcher import YFinanceFetcher
 from ebf_data.excel.snapshot.snapshot_table import SnapshotTable
 

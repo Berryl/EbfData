@@ -9,7 +9,7 @@ from typing import Literal
 from ebf_trading.domain.value_objects.option_specific.symbol_conversion import symbol_converter as sc
 
 from ebf_data.excel.pricing.option_price_fetcher import OptionPriceFetcher
-from ebf_data.excel.pricing.price_fetcher import PriceUpdateResult, SymbolPriceOutcome
+from ebf_data.excel.pricing.pricing_helpers import PriceUpdateResult, SymbolPriceOutcome
 from ebf_data.excel.pricing.yfinance_option_fetcher import YFinanceOptionFetcher
 from ebf_data.excel.snapshot.snapshot_table import SnapshotTable
 

@@ -2,7 +2,6 @@
 Price fetcher base class and run result types.
 """
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
 
 
 class PriceFetcher(ABC):
@@ -19,40 +18,3 @@ class PriceFetcher(ABC):
         ...
 
 
-@dataclass
-class PriceUpdateResult:
-    """
-    Summary of a single pricing run.
-    """
-    total_symbols: int = 0
-    failed: list[str] = field(default_factory=list)
-    price_fetching_time: float = 0.0
-    total_time: float = 0.0
-
-    @property
-    def updated_symbols(self) -> int:
-        return self.total_symbols - len(self.failed)
-
-    @property
-    def success_rate(self) -> float:
-        if self.total_symbols == 0:
-            return 0.0
-        return self.updated_symbols / self.total_symbols
-
-
-@dataclass(frozen=True)
-class SymbolPriceOutcome:
-    """
-    One row's fetch outcome: the raw Symbol-column text (or raw OCC
-    contract symbol, for options), the fetched price (None on failure),
-    and whether the fetch succeeded.
-
-    Shared between PriceUpdater and OptionPriceUpdater - both need one
-    JSON-ready entry per targeted row, using the exact live cell text, so
-    VBA's later Symbol-column match is guaranteed to line up. Duplicate
-    rows and suffixed variants like "CCJ_17" (on the equity side) all
-    get their own entry.
-    """
-    symbol: str
-    price: float | None
-    success: bool

@@ -3,7 +3,7 @@ import logging
 import pytest
 
 from ebf_data.excel.snapshot.option_price_updater import OptionPriceUpdater
-from ebf_data.excel.snapshot.price_updater import PriceUpdateResult
+from ebf_data.excel.pricing.pricing_helpers import PriceUpdateResult
 from tests.excel.pricing.pricing_scenarios import SnapshotScenario_ShortCalls, SnapshotScenario_ShortPuts
 
 

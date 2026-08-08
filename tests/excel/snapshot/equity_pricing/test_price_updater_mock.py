@@ -8,9 +8,9 @@ from ebf_data.excel.pricing.price_fetcher import PriceFetcher
 from ebf_data.excel.snapshot.price_updater import (
     PriceUpdater,
     PriceUpdateScope,
-    SymbolPriceOutcome,
     _extract_base_symbol,
 )
+from ebf_data.excel.pricing.pricing_helpers import SymbolPriceOutcome
 
 
 # region helpers

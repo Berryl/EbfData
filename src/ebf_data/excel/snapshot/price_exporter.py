@@ -21,7 +21,7 @@ from typing import Sequence
 
 from ebf_core.fileutil.project_file_locator import ProjectFileLocator
 
-from ebf_data.excel.pricing.price_fetcher import PriceUpdateResult
+from ebf_data.excel.pricing.pricing_helpers import PriceUpdateResult
 
 
 @dataclass(frozen=True)

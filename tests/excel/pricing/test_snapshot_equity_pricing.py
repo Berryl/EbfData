@@ -11,7 +11,8 @@ import logging
 
 import pytest
 
-from ebf_data.excel.snapshot.price_updater import PriceUpdater, PriceUpdateResult, PriceUpdateScope
+from ebf_data.excel.snapshot.price_updater import PriceUpdater, PriceUpdateScope
+from ebf_data.excel.pricing.pricing_helpers import PriceUpdateResult
 from tests.excel.pricing.pricing_scenarios import SnapshotScenario_WithBadSymbol, SnapshotScenario_EquityPricing
 
 # Symbols present in the scenario workbook's active rows.
