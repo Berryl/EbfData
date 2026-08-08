@@ -37,10 +37,12 @@ class FakeFetcher(PriceFetcher):
         return {t: 100.0 + i for i, t in enumerate(tickers)}
 
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def equity_scenario():
-    with SnapshotScenario_EquityPricing() as scenario:
-        yield scenario
+    table = SnapshotScenario_EquityPricing()
+    yield table
+    table.close()
+    return SnapshotScenario_EquityPricing()
 
 
 class TestWhenScopeIsAll:
