@@ -36,98 +36,94 @@ def _option_fetch(**per_type_failed_counts):
         )
         results[ot] = (result, outcomes)
     return results
+
+
 # endregion
 
+class TestPriceOrchestrator:
 
-@pytest.fixture
-def snapshot():
-    return MagicMock()
+    # region fixtures
+    @pytest.fixture
+    def snapshot(self):
+        return MagicMock()
 
+    @pytest.fixture
+    def price_updater(self):
+        return MagicMock(spec=PriceUpdater)
 
-@pytest.fixture
-def price_updater():
-    return MagicMock(spec=PriceUpdater)
+    @pytest.fixture
+    def option_updater(self):
+        return MagicMock(spec=OptionPriceUpdater)
 
+    @pytest.fixture
+    def exporter(self):
+        return MagicMock(spec=PriceExporter)
 
-@pytest.fixture
-def option_updater():
-    return MagicMock(spec=OptionPriceUpdater)
+    @pytest.fixture
+    def sut(self, snapshot, price_updater, option_updater, exporter):
+        return PriceOrchestrator(
+            snapshot, price_updater=price_updater, option_updater=option_updater, exporter=exporter)
+    # endregion
 
+    class TestWiring:
+        def test_all_collaborators_are_called_and_results_are_exported(self, sut, price_updater, option_updater,
+                                                                       exporter):
+            equity_fetch = (PriceUpdateResult(total_symbols=1), [SymbolPriceOutcome("AAPL", 200.0, True)])
+            option_fetch = _option_fetch()
 
-@pytest.fixture
-def exporter():
-    return MagicMock(spec=PriceExporter)
+            price_updater.fetch_prices.return_value = equity_fetch
+            option_updater.fetch_all_option_prices.return_value = option_fetch
+            exporter.export.return_value = "/fake/path/snapshot.json"
 
+            summary = sut.run()
 
-@pytest.fixture
-def sut(snapshot, price_updater, option_updater, exporter):
-    return PriceOrchestrator(
-        snapshot,
-        price_updater=price_updater,
-        option_updater=option_updater,
-        exporter=exporter,
-    )
+            price_updater.fetch_prices.assert_called_once_with()
+            option_updater.fetch_all_option_prices.assert_called_once_with()
+            exporter.export.assert_called_once_with(equity_fetch, option_fetch)
+            assert summary.export_path == "/fake/path/snapshot.json"
 
+        def test_default_collaborators_are_wired_to_the_given_snapshot(self, snapshot):
+            # No collaborators injected - real ones get built. Safe to
+            # instantiate without touching Excel, since none of these
+            # constructors access the workbook eagerly.
+            orchestrator = PriceOrchestrator(snapshot)
 
-class TestWiring:
-    def test_all_collaborators_are_called_and_results_are_exported(self, sut, price_updater, option_updater, exporter):
-        equity_fetch = (PriceUpdateResult(total_symbols=1), [SymbolPriceOutcome("AAPL", 200.0, True)])
-        option_fetch = _option_fetch()
+            assert isinstance(orchestrator._price_updater, PriceUpdater)
+            assert isinstance(orchestrator._option_updater, OptionPriceUpdater)
+            assert isinstance(orchestrator._exporter, PriceExporter)
+            assert orchestrator._price_updater._snapshot is snapshot
+            assert orchestrator._option_updater._snapshot is snapshot
+            assert orchestrator._exporter._snapshot is snapshot
 
-        price_updater.fetch_prices.return_value = equity_fetch
-        option_updater.fetch_all_option_prices.return_value = option_fetch
-        exporter.export.return_value = "/fake/path/snapshot.json"
+    class TestSummary:
+        def test_counts_are_aggregated_across_all_option_types(self, sut, price_updater, option_updater, exporter):
+            price_updater.fetch_prices.return_value = (
+                PriceUpdateResult(total_symbols=3, failed=["ZZZZ"]), []
+            )
+            option_updater.fetch_all_option_prices.return_value = _option_fetch(sc=1, lp=2)
+            exporter.export.return_value = "irrelevant"
 
-        summary = sut.run()
+            summary = sut.run()
 
-        price_updater.fetch_prices.assert_called_once_with()
-        option_updater.fetch_all_option_prices.assert_called_once_with()
-        exporter.export.assert_called_once_with(equity_fetch, option_fetch)
-        assert summary.export_path == "/fake/path/snapshot.json"
+            assert summary.equity_total == 3
+            assert summary.equity_failed == 1
+            assert summary.option_total == (1 + 1) + (0 + 1) + (0 + 1) + (2 + 1)  # sc, sp, lc, lp
+            assert summary.option_failed == 1 + 0 + 0 + 2
 
-    def test_default_collaborators_are_wired_to_the_given_snapshot(self, snapshot):
-        # No collaborators injected - real ones get built. Safe to
-        # instantiate without touching Excel, since none of these
-        # constructors access the workbook eagerly.
-        orchestrator = PriceOrchestrator(snapshot)
+        def test_had_any_failures_are_true_when_failures(self, sut, price_updater, option_updater, exporter):
+            price_updater.fetch_prices.return_value = (PriceUpdateResult(), [])
+            option_updater.fetch_all_option_prices.return_value = _option_fetch(sp=1)
+            exporter.export.return_value = "irrelevant"
 
-        assert isinstance(orchestrator._price_updater, PriceUpdater)
-        assert isinstance(orchestrator._option_updater, OptionPriceUpdater)
-        assert isinstance(orchestrator._exporter, PriceExporter)
-        assert orchestrator._price_updater._snapshot is snapshot
-        assert orchestrator._option_updater._snapshot is snapshot
-        assert orchestrator._exporter._snapshot is snapshot
+            summary = sut.run()
 
+            assert summary.had_any_failures is True
 
-class TestSummary:
-    def test_counts_are_aggregated_across_all_option_types(self, sut, price_updater, option_updater, exporter):
-        price_updater.fetch_prices.return_value = (
-            PriceUpdateResult(total_symbols=3, failed=["ZZZZ"]), []
-        )
-        option_updater.fetch_all_option_prices.return_value = _option_fetch(sc=1, lp=2)
-        exporter.export.return_value = "irrelevant"
+        def test_had_any_failures_false_when_everything_succeeded(self, sut, price_updater, option_updater, exporter):
+            price_updater.fetch_prices.return_value = (PriceUpdateResult(total_symbols=1), [])
+            option_updater.fetch_all_option_prices.return_value = _option_fetch()
+            exporter.export.return_value = "irrelevant"
 
-        summary = sut.run()
+            summary = sut.run()
 
-        assert summary.equity_total == 3
-        assert summary.equity_failed == 1
-        assert summary.option_total == (1 + 1) + (0 + 1) + (0 + 1) + (2 + 1)  # sc, sp, lc, lp
-        assert summary.option_failed == 1 + 0 + 0 + 2
-
-    def test_had_any_failures_are_true_when_failures(self, sut, price_updater, option_updater, exporter):
-        price_updater.fetch_prices.return_value = (PriceUpdateResult(), [])
-        option_updater.fetch_all_option_prices.return_value = _option_fetch(sp=1)
-        exporter.export.return_value = "irrelevant"
-
-        summary = sut.run()
-
-        assert summary.had_any_failures is True
-
-    def test_had_any_failures_false_when_everything_succeeded(self, sut, price_updater, option_updater, exporter):
-        price_updater.fetch_prices.return_value = (PriceUpdateResult(total_symbols=1), [])
-        option_updater.fetch_all_option_prices.return_value = _option_fetch()
-        exporter.export.return_value = "irrelevant"
-
-        summary = sut.run()
-
-        assert summary.had_any_failures is False
+            assert summary.had_any_failures is False
