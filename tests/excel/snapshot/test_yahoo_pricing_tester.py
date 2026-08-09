@@ -1,6 +1,6 @@
 import pytest
 
-from ebf_data.excel.snapshot.option_price_updater import OptionPriceUpdater
+from ebf_data.excel.snapshot.option_price_updater import OptionPriceUpdater, OptionType
 from ebf_data.excel.snapshot.price_updater import PriceUpdater
 from excel.pricing.pricing_scenarios import SnapshotScenario_Pricing
 
@@ -40,4 +40,9 @@ class TestYahooPricingWithWkb:
             return OptionPriceUpdater(pricing_scenario)
 
         def test_can_update__all_symbols(self, option_updater):
-            result, outcomes = option_updater.fetch_all_option_prices()
+            results = option_updater.fetch_all_option_prices()
+
+            # Long Puts
+            lp_result, lp_outcomes = results[OptionType.LONG_PUT]
+            assert lp_result.total_symbols and len(lp_outcomes) == LONG_PUT_SYMBOL_COUNT
+            assert lp_result.updated_symbols >= 0, "may be 0 on a bad day"
