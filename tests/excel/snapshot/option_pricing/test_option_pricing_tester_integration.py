@@ -5,20 +5,20 @@ from ebf_data.excel.snapshot.price_updater import PriceUpdater
 from excel.pricing.pricing_scenarios import SnapshotScenario_Pricing
 
 EQUITY_SYMBOL_COUNT = 32
-LONG_PUT_SYMBOL_COUNT = 1  # only LULU_7 visible in the LP view
+LONG_PUT_SYMBOL_COUNT = 1
 SHORT_PUT_SYMBOL_COUNT = 9
 LONG_CALL_SYMBOL_COUNT = 5
 SHORT_CALL_SYMBOL_COUNT = 5
 
-
-class TestYahooPricingWithWkb:
+@pytest.mark.integration
+class TestOptionPricingIntegration:
 
     @pytest.fixture(scope="module")
     def pricing_scenario(self):
-        # table = SnapshotScenario_Pricing()
-        # yield table
-        # table.close()
-        return SnapshotScenario_Pricing()
+        table = SnapshotScenario_Pricing()
+        yield table
+        table.close()
+        # return SnapshotScenario_Pricing()
 
     class TestEquityPricing:
         @pytest.fixture

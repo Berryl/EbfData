@@ -29,14 +29,15 @@ def get_outcomes(
         results: dict[OptionType, tuple[PriceUpdateResult, list[SymbolPriceOutcome]]], t: OptionType | None = None,
 ) -> list[SymbolPriceOutcome]:
     """
-    Extract outcomes for one option type or for all types when *t* is None.
+    Extract outcomes for one option type or for every type present in
+    *results* when *t* is None.
     """
     if t is not None:
         return results[t][1]
 
     all_outcomes: list[SymbolPriceOutcome] = []
-    for t in OptionType:
-        all_outcomes.extend(results[t][1])
+    for _, outcomes in results.values():
+        all_outcomes.extend(outcomes)
     return all_outcomes
 
 
@@ -57,26 +58,31 @@ class OptionPriceUpdater:
         self._fetcher = fetcher or YFinanceOptionFetcher()
 
     def fetch_short_call_prices(self) -> tuple[PriceUpdateResult, list[SymbolPriceOutcome]]:
-        return self.fetch_all_option_prices()[OptionType.SHORT_CALL]
+        return self.fetch_all_option_prices({OptionType.SHORT_CALL})[OptionType.SHORT_CALL]
 
     def fetch_short_put_prices(self) -> tuple[PriceUpdateResult, list[SymbolPriceOutcome]]:
-        return self.fetch_all_option_prices()[OptionType.SHORT_PUT]
+        return self.fetch_all_option_prices({OptionType.SHORT_PUT})[OptionType.SHORT_PUT]
 
     def fetch_long_call_prices(self) -> tuple[PriceUpdateResult, list[SymbolPriceOutcome]]:
-        return self.fetch_all_option_prices()[OptionType.LONG_CALL]
+        return self.fetch_all_option_prices({OptionType.LONG_CALL})[OptionType.LONG_CALL]
 
     def fetch_long_put_prices(self) -> tuple[PriceUpdateResult, list[SymbolPriceOutcome]]:
-        return self.fetch_all_option_prices()[OptionType.LONG_PUT]
+        return self.fetch_all_option_prices({OptionType.LONG_PUT})[OptionType.LONG_PUT]
 
-    def fetch_all_option_prices(self) -> dict[OptionType, tuple[PriceUpdateResult, list[SymbolPriceOutcome]]]:
+    def fetch_all_option_prices(self, types: set[OptionType] | None = None
+    ) -> dict[OptionType, tuple[PriceUpdateResult, list[SymbolPriceOutcome]]]:
         """
-        Fetch prices for all four option types in a single pass.
+        Fetch prices for the given option types in a single pass - one
+        shared fetch_quotes() call across every requested type's symbols.
 
-        Returns a dict keyed by OptionType.
+        The types arg defaults to all four; to pass a smaller set (e.g., OptionType.SHORT_CALL),
+        to scope the fetch so a single-type caller isn't paying to fetch the other three.
         """
         t0 = time.monotonic()
         self._snapshot.refresh()
         df = self._snapshot.df
+
+        active_types = types if types is not None else set(OptionType)
 
         option_types: dict[OptionType, tuple[str, BidOrAsk]] = {
             OptionType.SHORT_CALL: (self.SC_SYMBOL_COLUMN, "ask"),
@@ -85,11 +91,14 @@ class OptionPriceUpdater:
             OptionType.LONG_PUT: (self.LP_SYMBOL_COLUMN, "bid"),
         }
 
-        # 1. Collect symbols + row indices per option type
+        # 1. Collect symbols + row indices per requested option type
         option_type_data: dict[OptionType, dict[str, list[int]]] = {}
         all_symbols: set[str] = set()
 
         for ot, (col, _) in option_types.items():
+            if ot not in active_types:
+                continue
+
             symbol_to_indices: dict[str, list[int]] = {}
 
             if col in df.columns:
@@ -107,15 +116,16 @@ class OptionPriceUpdater:
 
             option_type_data[ot] = symbol_to_indices
 
-        # 2. Single network call
         t1 = time.monotonic()
+        # 2. Single network call, scoped to the requested types
         quotes = self._fetcher.fetch_quotes(list(all_symbols)) if all_symbols else {}
         fetch_time = time.monotonic() - t1
 
-        # 3. Build results per ot
+        # 3. Build results for the requested types only
         results: dict[OptionType, tuple[PriceUpdateResult, list[SymbolPriceOutcome]]] = {}
 
-        for ot, (col, price_side) in option_types.items():
+        for ot in active_types:
+            col, price_side = option_types[ot]
             result = PriceUpdateResult()
             outcomes: list[SymbolPriceOutcome] = []
             failed: list[str] = []

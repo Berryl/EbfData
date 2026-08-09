@@ -32,7 +32,7 @@ def make_df(rows: list[dict], columns: list[str] | None = None) -> pd.DataFrame:
 # endregion
 
 
-class TestOptionPriceUpdater:
+class TestOptionPriceUpdaterMock:
 
     # region fixtures
     @pytest.fixture
