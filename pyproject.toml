@@ -94,8 +94,7 @@ check_untyped_defs = true
 testpaths = [
    "tests",
 ]
-tmp_path_retention_count = 0
-tmp_path_retention_policy = "none"
+addopts = ["--basetemp=.pytest_tmp"]
 
 python_files = [
     "test_*.py",
