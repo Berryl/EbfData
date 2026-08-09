@@ -1,6 +1,6 @@
 import pytest
 
-from ebf_data.excel.snapshot.option_price_updater import OptionPriceUpdater, OptionType
+from ebf_data.excel.snapshot.option_price_updater import OptionPriceUpdater, OptionType, get_outcomes
 from ebf_data.excel.snapshot.price_updater import PriceUpdater
 from excel.pricing.pricing_scenarios import SnapshotScenario_Pricing
 
@@ -46,3 +46,26 @@ class TestYahooPricingWithWkb:
             lp_result, lp_outcomes = results[OptionType.LONG_PUT]
             assert lp_result.total_symbols and len(lp_outcomes) == LONG_PUT_SYMBOL_COUNT
             assert lp_result.updated_symbols >= 0, "may be 0 on a bad day"
+
+            # Short Puts
+            sp_result, sp_outcomes = results[OptionType.SHORT_PUT]
+            assert sp_result.total_symbols and len(sp_outcomes) == SHORT_PUT_SYMBOL_COUNT
+            assert sp_result.updated_symbols > 0
+
+            # Long Calls
+            lc_result, lc_outcomes = results[OptionType.LONG_CALL]
+            assert lc_result.total_symbols and len(lc_outcomes) == LONG_CALL_SYMBOL_COUNT
+            assert lc_result.updated_symbols > 0
+
+            # Short Calls
+            sc_result, sc_outcomes = results[OptionType.SHORT_CALL]
+            assert sc_result.total_symbols and len(sc_outcomes) == SHORT_CALL_SYMBOL_COUNT
+            assert sc_result.updated_symbols > 0
+
+            all_outcomes = get_outcomes(results)
+            assert len(all_outcomes) == (
+                    LONG_PUT_SYMBOL_COUNT
+                    + SHORT_PUT_SYMBOL_COUNT
+                    + LONG_CALL_SYMBOL_COUNT
+                    + SHORT_CALL_SYMBOL_COUNT
+            )
