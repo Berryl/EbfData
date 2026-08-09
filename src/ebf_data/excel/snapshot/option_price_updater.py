@@ -148,7 +148,7 @@ class OptionPriceUpdater:
                     failed.append(symbol)
 
                 for idx in indices:
-                    raw_symbol = str(df.loc[idx, col])  # noqa type: ignore[arg-type]
+                    raw_symbol = str(df.loc[idx, col])  # noqa ignore[arg-type]
                     outcomes.append(
                         SymbolPriceOutcome(symbol=raw_symbol, price=price, success=success)
                     )
