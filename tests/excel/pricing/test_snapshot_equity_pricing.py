@@ -7,13 +7,12 @@ end to end against a real workbook. Slow by nature; requires network.
 TestMockedPriceUpdate: mocks _fetch_prices to test write mechanics
 in isolation, without network dependency. (placeholder for now)
 """
-import logging
 
 import pytest
 
-from ebf_data.excel.snapshot.price_updater import PriceUpdater, PriceUpdateScope
 from ebf_data.excel.pricing.pricing_helpers import PriceUpdateResult
-from tests.excel.pricing.pricing_scenarios import SnapshotScenario_WithBadSymbol, SnapshotScenario_EquityPricing
+from ebf_data.excel.snapshot.price_updater import PriceUpdater, PriceUpdateScope
+from tests.excel.pricing.pricing_scenarios import SnapshotScenario_EquityPricing
 
 # Symbols present in the scenario workbook's active rows.
 ACTIVE_SYMBOLS = ["BA", "CCJ", "DRAM", "MARA", "PLTR", "AMZN", "PL", "INFQ", "B", "SOFI"]
@@ -40,7 +39,6 @@ class TestSnapshotPricingTable:
         table = SnapshotScenario_EquityPricing()
         yield table
         table.close()
-
 
     class TestReadStructure:
         def test_size(self, sut):
@@ -348,26 +346,3 @@ class TestSnapshotPricingTable:
                     assert "selected" in message.lower(), f"Expected 'selected' in run summary message, got: {message!r}"
                 except Exception as e:
                     pytest.fail(f"Could not read LastPriceRunInfo DV message: {e}")
-
-    class TestWhenBadSymbolReturnsNone:
-        @pytest.fixture
-        def sut_with_bad_symbol(self) -> SnapshotScenario_WithBadSymbol:
-            return SnapshotScenario_WithBadSymbol()
-
-        # @pytest.mark.skip(reason="run on demand only")
-        def test_not_sure_yet(self, sut_with_bad_symbol):
-            PriceUpdater(sut_with_bad_symbol).fetch_prices()
-
-@pytest.mark.skip(reason="run on demand only")
-class TestEquityRunWithLogging:
-    def test_can_run_with_logging(self, caplog):
-
-        sut = SnapshotScenario_EquityPricing()
-        with caplog.at_level(logging.DEBUG):
-            PriceUpdater(sut).fetch_prices()
-        if caplog.text.strip():
-            print("\n----- PriceUpdater log output -----")
-            print(caplog.text)
-            print("----- end log -----\n")
-
-        sut.refresh()

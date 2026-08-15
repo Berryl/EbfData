@@ -4,7 +4,7 @@ from ebf_trading.domain.entities.transaction_events.transaction_event_type impor
 from ebf_data.excel.infrastructure.excel_book_finder import find_open_book
 from ebf_data.excel.infrastructure.xl_table_base import xlTable
 
-SNAPSHOT_WB = "snapshot.xlsm"
+SNAPSHOT_WB = "snapshot.xlsm" # this is PRODUCTION wkb
 SNAPSHOT_WKS = "SNAP"
 SNAPSHOT_TABLE = "SnapshotTable"
 
@@ -36,8 +36,11 @@ class SnapshotTable(xlTable):
     SC_ASK_COLUMN = "SC Current Ask"
     SP_ASK_COLUMN = "SP Current Ask"
 
-    def __init__(self) -> None:
-        super().__init__(find_open_book(SNAPSHOT_WB), SNAPSHOT_WKS, SNAPSHOT_TABLE)
+    def __init__(self, workbook_name: str = SNAPSHOT_WB) -> None:
+        """
+        :param workbook_name: override for testing (ie, "snapshot_pricing_tester.xlsm"
+        """
+        super().__init__(find_open_book(workbook_name), SNAPSHOT_WKS, SNAPSHOT_TABLE)
 
     def get_expired_short_calls(self) -> pd.DataFrame:
         """Return all expired short calls. Returns an empty DataFrame if none."""

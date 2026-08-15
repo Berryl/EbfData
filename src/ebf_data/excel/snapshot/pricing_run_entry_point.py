@@ -19,10 +19,7 @@ import sys
 from ebf_data.excel.snapshot.price_orchestrator import PriceOrchestrator
 from ebf_data.excel.snapshot.snapshot_table import SnapshotTable
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)-8s %(name)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 
