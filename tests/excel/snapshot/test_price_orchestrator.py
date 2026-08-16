@@ -1,7 +1,9 @@
 """
-Unit tests for PriceOrchestrator - verifies wiring only (does it call the
-three collaborators correctly and compute the summary right), since each
-collaborator already has its own full test suite elsewhere.
+Unit tests for PriceOrchestrator - verifies wiring and summary
+computation across all three public methods (run, run_equity_only,
+run_options_only), since each collaborator (PriceUpdater,
+OptionPriceUpdater, PriceExporter) already has its own full test suite
+elsewhere.
 """
 from unittest.mock import MagicMock
 
@@ -36,6 +38,12 @@ def _option_fetch(**per_type_failed_counts):
         )
         results[ot] = (result, outcomes)
     return results
+
+
+def _empty_options() -> dict:
+    """Placeholder shape PriceOrchestrator pads missing option types
+    with - all four keys present, each with zero symbols."""
+    return {ot: (PriceUpdateResult(), []) for ot in OptionType}
 
 
 # endregion
@@ -127,3 +135,92 @@ class TestPriceOrchestrator:
             summary = sut.run()
 
             assert summary.had_any_failures is False
+
+    class TestRunEquityOnly:
+        def test_option_updater_is_never_called(self, sut, price_updater, option_updater, exporter):
+            price_updater.fetch_prices.return_value = (PriceUpdateResult(total_symbols=1), [])
+            exporter.export.return_value = "irrelevant"
+
+            sut.run_equity_only()
+
+            option_updater.fetch_all_option_prices.assert_not_called()
+
+        def test_all_four_option_types_are_padded_empty_in_the_export_call(self, sut, price_updater, exporter):
+            price_updater.fetch_prices.return_value = (
+                PriceUpdateResult(total_symbols=2, failed=["ZZZZ"]),
+                [SymbolPriceOutcome("AAPL", 200.0, True), SymbolPriceOutcome("ZZZZ", None, False)],
+            )
+            exporter.export.return_value = "irrelevant"
+
+            sut.run_equity_only()
+
+            called_equity, called_options = exporter.export.call_args[0]
+            assert called_equity == price_updater.fetch_prices.return_value
+            assert set(called_options.keys()) == set(OptionType)
+            for result, outcomes in called_options.values():
+                assert result.total_symbols == 0
+                assert outcomes == []
+
+        def test_summary_reflects_equity_only(self, sut, price_updater, exporter):
+            price_updater.fetch_prices.return_value = (
+                PriceUpdateResult(total_symbols=2, failed=["ZZZZ"]), []
+            )
+            exporter.export.return_value = "irrelevant"
+
+            summary = sut.run_equity_only()
+
+            assert summary.equity_total == 2
+            assert summary.equity_failed == 1
+            assert summary.option_total == 0
+            assert summary.option_failed == 0
+
+    class TestRunOptionsOnly:
+        def test_price_updater_is_never_called(self, sut, price_updater, option_updater, exporter):
+            option_updater.fetch_all_option_prices.return_value = _empty_options()
+            exporter.export.return_value = "irrelevant"
+
+            sut.run_options_only()
+
+            price_updater.fetch_prices.assert_not_called()
+
+        def test_default_call_fetches_all_types_unscoped(self, sut, option_updater, exporter):
+            option_updater.fetch_all_option_prices.return_value = _option_fetch()
+            exporter.export.return_value = "irrelevant"
+
+            sut.run_options_only()
+
+            option_updater.fetch_all_option_prices.assert_called_once_with(None)
+
+        def test_scoped_subset_is_forwarded_and_the_rest_are_padded(self, sut, option_updater, exporter):
+            scoped = {OptionType.SHORT_CALL}
+            option_updater.fetch_all_option_prices.return_value = {
+                OptionType.SHORT_CALL: (
+                    PriceUpdateResult(total_symbols=3), [SymbolPriceOutcome("SC1", 2.0, True)]
+                ),
+            }
+            exporter.export.return_value = "irrelevant"
+
+            summary = sut.run_options_only(scoped)
+
+            option_updater.fetch_all_option_prices.assert_called_once_with(scoped)
+
+            called_equity, called_options = exporter.export.call_args[0]
+            assert called_equity == (PriceUpdateResult(), [])
+            assert set(called_options.keys()) == set(OptionType)
+            assert called_options[OptionType.SHORT_CALL][0].total_symbols == 3
+            for ot in (OptionType.SHORT_PUT, OptionType.LONG_CALL, OptionType.LONG_PUT):
+                result, outcomes = called_options[ot]
+                assert result.total_symbols == 0
+                assert outcomes == []
+
+            assert summary.option_total == 3
+
+        def test_summary_reflects_options_only(self, sut, option_updater, exporter):
+            option_updater.fetch_all_option_prices.return_value = _option_fetch()
+            exporter.export.return_value = "irrelevant"
+
+            summary = sut.run_options_only()
+
+            assert summary.equity_total == 0
+            assert summary.equity_failed == 0
+            assert summary.option_total == 4  # one guaranteed success per type, 0 extra failures

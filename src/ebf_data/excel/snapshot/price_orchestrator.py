@@ -2,12 +2,18 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+from ebf_data.excel.pricing.pricing_helpers import PriceUpdateResult, SymbolPriceOutcome
 from ebf_data.excel.snapshot.price_exporter import PriceExporter
-from ebf_data.excel.snapshot.option_price_updater import OptionPriceUpdater
+from ebf_data.excel.snapshot.option_price_updater import OptionPriceUpdater, OptionType
 from ebf_data.excel.snapshot.price_updater import PriceUpdater
 from ebf_data.excel.snapshot.snapshot_table import SnapshotTable
 
 logger = logging.getLogger(__name__)
+
+EquityFetch = tuple[PriceUpdateResult, list[SymbolPriceOutcome]]
+OptionFetch = dict[OptionType, tuple[PriceUpdateResult, list[SymbolPriceOutcome]]]
+
+_EMPTY_EQUITY_FETCH: EquityFetch = (PriceUpdateResult(), [])
 
 
 @dataclass(frozen=True)
@@ -26,12 +32,22 @@ class PricingRunSummary:
 
 class PriceOrchestrator:
     """
-    Runs one full fetch-and-export cycle against a snapshot table.
+    Runs a fetch-and-export cycle against a snapshot table - full
+    (run()), equity-only, or options-only (optionally scoped to a
+    subset of OptionType).
 
     Production usage is PriceOrchestrator(SnapshotTable()).run() - the
     three collaborators default to their real implementations, all wired
     to the same snapshot. Tests inject fakes/mocks for all three, exactly
     like every other class in this pipeline.
+
+    PriceExporter.export() requires all four OptionType keys and an
+    equity tuple to be present regardless of which of these methods was
+    called - the equity-only and options-only paths pad whatever wasn't
+    actually fetched with empty placeholders (matching the already-exercised
+    "long_puts: prices: []" shape), so every JSON this class writes has the same
+    five-section structure VBA already knows how to read, whether this particular
+    run touched all of them or not.
     """
 
     def __init__(
@@ -46,11 +62,34 @@ class PriceOrchestrator:
         self._exporter = exporter or PriceExporter(snapshot)
 
     def run(self) -> PricingRunSummary:
-        logger.info("Starting pricing run")
-
+        """Full run: equity plus all four option types."""
+        logger.info("Starting pricing run (equity + all options)")
         equity_fetch = self._price_updater.fetch_prices()
         option_fetch = self._option_updater.fetch_all_option_prices()
+        return self._export_and_summarize(equity_fetch, option_fetch)
 
+    def run_equity_only(self) -> PricingRunSummary:
+        """
+        Equity only. The JSON's four option sections come back present
+        but empty - VBA applies 0/0 for each, the same as it already does
+        for long_puts whenever there are no open long-put positions.
+        """
+        logger.info("Starting pricing run (equity only)")
+        equity_fetch = self._price_updater.fetch_prices()
+        return self._export_and_summarize(equity_fetch, {})
+
+    def run_options_only(self, types: set[OptionType] | None = None) -> PricingRunSummary:
+        """
+        Options only (all four by default, or a subset). The JSON's
+        equity section comes back present but empty - VBA applies 0/0
+        for it, the same shape as an equity-only run's untouched sections.
+        """
+        logger.info(f"Starting pricing run (options only, types={types or 'all'})")
+        option_fetch = self._option_updater.fetch_all_option_prices(types)
+        return self._export_and_summarize(_EMPTY_EQUITY_FETCH, option_fetch)
+
+    def _export_and_summarize(self, equity_fetch: EquityFetch, option_fetch: OptionFetch) -> PricingRunSummary:
+        option_fetch = self._pad_missing_option_types(option_fetch)
         export_path = self._exporter.export(equity_fetch, option_fetch)
 
         equity_result, _ = equity_fetch
@@ -74,3 +113,11 @@ class PriceOrchestrator:
         )
 
         return summary
+
+    @staticmethod
+    def _pad_missing_option_types(option_fetch: OptionFetch) -> OptionFetch:
+        """PriceExporter.export() requires all four OptionType keys -
+        fill in empty placeholders for any type this particular run
+        didn't actually fetch (a no-op when all four are already there,
+        e.g., after an unscoped fetch_all_option_prices())."""
+        return {ot: option_fetch.get(ot, (PriceUpdateResult(), [])) for ot in OptionType}
