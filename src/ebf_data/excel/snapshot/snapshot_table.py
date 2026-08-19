@@ -31,8 +31,8 @@ class SnapshotTable(xlTable):
     LP_SYMBOL_COLUMN = "LP Symbol"
     SC_SYMBOL_COLUMN = "SC Symbol"
     SP_SYMBOL_COLUMN = "SP Symbol"
-    LC_BID_COLUMN = "LC Current Value"
-    LP_BID_COLUMN = "LP Current Value"
+    LC_BID_COLUMN = "LC Contract Value"
+    LP_BID_COLUMN = "LP Contract Value"
     SC_ASK_COLUMN = "SC Current Ask"
     SP_ASK_COLUMN = "SP Current Ask"
 

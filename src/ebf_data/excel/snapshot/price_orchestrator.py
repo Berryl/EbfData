@@ -47,7 +47,13 @@ class PriceOrchestrator:
     actually fetched with empty placeholders (matching the already-exercised
     "long_puts: prices: []" shape), so every JSON this class writes has the same
     five-section structure VBA already knows how to read, whether this particular
-    run touched all of them or not.
+    run touched all of them or not. Each method also tells PriceExporter which
+    sections it actually attempted (vs. padded) - a padded section and a
+    genuinely-empty attempted section produce identical price/summary data, and
+    only the attempted flag lets VBA tell "nothing to fetch" apart from "wasn't
+    fetched" - the distinction that matters for its per-column tooltip, which
+    should never overwrite a real result from an earlier pass with a false
+    "0 symbols" from a later pass that never touched that section.
     """
 
     def __init__(
@@ -66,31 +72,45 @@ class PriceOrchestrator:
         logger.info("Starting pricing run (equity + all options)")
         equity_fetch = self._price_updater.fetch_prices()
         option_fetch = self._option_updater.fetch_all_option_prices()
-        return self._export_and_summarize(equity_fetch, option_fetch)
+        return self._export_and_summarize(
+            equity_fetch, option_fetch, equity_attempted=True, attempted_option_types=None)
 
     def run_equity_only(self) -> PricingRunSummary:
         """
         Equity only. The JSON's four option sections come back present
-        but empty - VBA applies 0/0 for each, the same as it already does
-        for long_puts whenever there are no open long-put positions.
+        but empty AND marked attempted=False - VBA applies 0/0 for each
+        and leaves their tooltips untouched, rather than overwriting
+        whatever a prior run (e.g. this same Test sequence's options
+        stage) correctly wrote there.
         """
         logger.info("Starting pricing run (equity only)")
         equity_fetch = self._price_updater.fetch_prices()
-        return self._export_and_summarize(equity_fetch, {})
+        return self._export_and_summarize(
+            equity_fetch, {}, equity_attempted=True, attempted_option_types=set())
 
     def run_options_only(self, types: set[OptionType] | None = None) -> PricingRunSummary:
         """
         Options only (all four by default, or a subset). The JSON's
-        equity section comes back present but empty - VBA applies 0/0
-        for it, the same shape as an equity-only run's untouched sections.
+        equity section comes back present but empty AND marked
+        attempted=False - the same reasoning as run_equity_only()'s option
+        sections, just mirrored onto equity.
         """
         logger.info(f"Starting pricing run (options only, types={types or 'all'})")
         option_fetch = self._option_updater.fetch_all_option_prices(types)
-        return self._export_and_summarize(_EMPTY_EQUITY_FETCH, option_fetch)
+        return self._export_and_summarize(
+            _EMPTY_EQUITY_FETCH, option_fetch, equity_attempted=False, attempted_option_types=types)
 
-    def _export_and_summarize(self, equity_fetch: EquityFetch, option_fetch: OptionFetch) -> PricingRunSummary:
+    def _export_and_summarize(
+            self,
+            equity_fetch: EquityFetch,
+            option_fetch: OptionFetch,
+            equity_attempted: bool,
+            attempted_option_types: set[OptionType] | None,
+    ) -> PricingRunSummary:
         option_fetch = self._pad_missing_option_types(option_fetch)
-        export_path = self._exporter.export(equity_fetch, option_fetch)
+        export_path = self._exporter.export(
+            equity_fetch, option_fetch,
+            equity_attempted=equity_attempted, attempted_option_types=attempted_option_types)
 
         equity_result, _ = equity_fetch
         option_total = sum(result.total_symbols for result, _ in option_fetch.values())

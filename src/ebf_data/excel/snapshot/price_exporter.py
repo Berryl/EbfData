@@ -12,6 +12,18 @@ Failures are dropped entirely rather than carried through as "existing"
 values: a symbol that failed to fetch doesn't appear in a section's price
 list, so VBA leaves that cell at whatever value was last successfully written.
 (Failures are still noted in the run summary)
+
+Every section carries an "attempted" flag. This exists specifically for
+a scoped run (PriceOrchestrator.run_equity_only()/run_options_only()),
+where sections outside the scope come through as an empty placeholder
+(zero symbols, no failures) so the JSON keeps a uniform five-section
+shape regardless of what was actually fetched. Without "attempted",
+that placeholder is indistinguishable from a section that was genuinely
+fetched and genuinely found nothing active - and VBA, which writes a
+per-column tooltip from every section on every 'apply', would overwrite a
+correct tooltip from an earlier pass with a false "0 symbols" on a
+later pass that never touched that section. "attempted" is what
+lets VBA skip writing a tooltip for a section this run didn't touch.
 """
 
 from __future__ import annotations
@@ -76,6 +88,7 @@ class SectionSummary:
 class SectionExport:
     symbol_column: str
     target_column: str
+    attempted: bool
     prices: list[PriceEntry]
     summary: SectionSummary
 
@@ -111,7 +124,13 @@ class PriceExporter:
         self._snapshot = snapshot
         self._locator = locator or ProjectFileLocator()
 
-    def export(self, equity: EquityFetch, options: OptionFetch) -> Path:
+    def export(
+            self,
+            equity: EquityFetch,
+            options: OptionFetch,
+            equity_attempted: bool = True,
+            attempted_option_types: set[OptionType] | None = None,
+    ) -> Path:
         """
         Build the full export and write it atomically to pending/.
 
@@ -119,18 +138,29 @@ class PriceExporter:
         options is OptionPriceUpdater.fetch_all_option_prices()'s return
         value directly - all four OptionType keys must be present.
 
+        equity_attempted and attempted_option_types default to "everything
+        was attempted" - a full run() doesn't need to pass either. A
+        scoped run passes these explicitly so sections outside its scope
+        are marked attempted=False rather than looking identical to a
+        genuinely-empty attempted section.
+
         Writing is atomic (temp file + replace), so a VBA poll of pending/
         never observes a partially written file. Returns the path written.
         """
         _, equity_outcomes = equity
+        attempted_types = attempted_option_types if attempted_option_types is not None else set(OptionType)
 
         export_data = PricingExport(
             identity=self._build_identity(),
-            equity=self._build_section(EQUITY, equity_outcomes),
-            short_calls=self._build_section(SHORT_CALLS, options[OptionType.SHORT_CALL][1]),
-            short_puts=self._build_section(SHORT_PUTS, options[OptionType.SHORT_PUT][1]),
-            long_calls=self._build_section(LONG_CALLS, options[OptionType.LONG_CALL][1]),
-            long_puts=self._build_section(LONG_PUTS, options[OptionType.LONG_PUT][1]),
+            equity=self._build_section(EQUITY, equity_outcomes, equity_attempted),
+            short_calls=self._build_section(
+                SHORT_CALLS, options[OptionType.SHORT_CALL][1], OptionType.SHORT_CALL in attempted_types),
+            short_puts=self._build_section(
+                SHORT_PUTS, options[OptionType.SHORT_PUT][1], OptionType.SHORT_PUT in attempted_types),
+            long_calls=self._build_section(
+                LONG_CALLS, options[OptionType.LONG_CALL][1], OptionType.LONG_CALL in attempted_types),
+            long_puts=self._build_section(
+                LONG_PUTS, options[OptionType.LONG_PUT][1], OptionType.LONG_PUT in attempted_types),
         )
         return self._write_atomic(export_data)
 
@@ -143,12 +173,13 @@ class PriceExporter:
         )
 
     @staticmethod
-    def _build_section(spec: SectionSpec, outcomes: list[SymbolPriceOutcome]) -> SectionExport:
+    def _build_section(spec: SectionSpec, outcomes: list[SymbolPriceOutcome], attempted: bool) -> SectionExport:
         succeeded = [o for o in outcomes if o.success]
         failed = [o for o in outcomes if not o.success]
         return SectionExport(
             symbol_column=spec.symbol_column,
             target_column=spec.target_column,
+            attempted=attempted,
             prices=[PriceEntry(symbol=o.symbol, price=o.price) for o in succeeded],
             summary=SectionSummary(
                 total=len(outcomes),
