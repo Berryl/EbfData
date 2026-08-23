@@ -1,0 +1,38 @@
+"""SQLite implementation of the trading account repository."""
+
+from contextlib import closing
+from uuid import UUID
+
+from ebf_data.sqlite.database import DatabasePath, connect_database
+from ebf_domain.money.currency import get_currency
+from ebf_domain.money.money import Money
+from ebf_trading.domain.entities.account import Account
+
+
+class SQLiteAccountRepository:
+    """Load accounts needed by the trade-campaign creation operation."""
+
+    def __init__(self, database: DatabasePath) -> None:
+        self._database = database
+
+    def get(self, account_id: UUID) -> Account | None:
+        """Return the account with the supplied UUID, if it exists."""
+        with closing(connect_database(self._database)) as connection:
+            row = connection.execute(
+                """
+                SELECT id, owner, balance_minor_units, balance_currency
+                FROM accounts
+                WHERE id = ?
+                """,
+                (str(account_id),),
+            ).fetchone()
+
+        if row is None:
+            return None
+
+        currency = get_currency(str(row["balance_currency"]))
+        return Account(
+            owner=str(row["owner"]),
+            balance=Money.from_cents(int(row["balance_minor_units"]), currency),
+            id_value=UUID(str(row["id"])),
+        )

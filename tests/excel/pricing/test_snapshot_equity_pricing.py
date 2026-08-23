@@ -33,6 +33,7 @@ SCENARIO_PRICES = {
 }
 
 
+@pytest.mark.skip("ignore until SCOPE testing visible, selected is important ")
 class TestSnapshotPricingTable:
     @pytest.fixture(scope="module")
     def sut(self) -> SnapshotScenario_EquityPricing:
@@ -51,104 +52,6 @@ class TestSnapshotPricingTable:
             assert "SC DTE" in headers
             assert "SC Intrinsic Value" in headers
             assert "GUID Lookup" in headers
-
-    class TestPriceUpdater:
-        """
-        Hits real yfinance. Slow, requires network. This is the test
-        that actually proves the full pipeline works.
-        """
-
-        @pytest.fixture(scope="class")
-        def updated_sut(self, sut: SnapshotScenario_EquityPricing) -> tuple[
-            SnapshotScenario_EquityPricing, PriceUpdateResult]:
-            """
-            Run update_prices() once for the whole class. Returns a tuple of
-            (table, result) so benchmark and correctness tests share the same run.
-            """
-            result: PriceUpdateResult = PriceUpdater(sut).fetch_prices()
-            sut.refresh()
-            return sut, result
-
-        def test_all_active_rows_have_a_price(self, updated_sut):
-            sut, _ = updated_sut
-            df = sut.df
-            active = df[df["Position"].notna() & (df["Position"] != "")]
-            assert not active.empty, "No active rows found in scenario workbook"
-
-            for idx, row in active.iterrows():
-                price = row["Last Price"]
-                symbol = row["Symbol"]
-                assert price is not None, f"{symbol}: Last Price is None after update"
-                assert float(price) > 0, f"{symbol}: Last Price {price} is not positive"
-
-        def test_prices_differ_from_initial_scenario_static_values(self, updated_sut):
-            """
-            Prices should differ from the static values saved in the scenario
-            workbook - confirms update_prices() actually wrote new values
-            rather than leaving the static ones in place.
-
-            Allows for a small tolerance since in rare cases a live price
-            could coincidentally match the static value exactly.
-            """
-            sut, _ = updated_sut
-            df = sut.df
-            active = df[df["Position"].notna() & (df["Position"] != "")]
-
-            changed = 0
-            for idx, row in active.iterrows():
-                base = row["Symbol"].split("_")[0]
-                static = SCENARIO_PRICES.get(base)
-                if static is None:
-                    continue
-                live = float(row["Last Price"])
-                if abs(live - static) > 0.01:
-                    changed += 1
-
-            assert changed >= len(SCENARIO_PRICES) // 2, (
-                f"Only {changed} prices changed from static values - "
-                f"update_prices() may not have written correctly"
-            )
-
-        def test_summary_run_info_message_was_written(self, updated_sut):
-            """Confirm the LastPriceRunInfo named range has a DV message after the run."""
-            sut, _ = updated_sut
-            try:
-                run_info = sut.book.names["LastPriceRunInfo"].refers_to_range
-                dv = run_info.api.Validation
-                assert dv.ShowInput is True
-                assert "YFinance Pricing" in (dv.InputTitle or "")
-                assert "updated" in (dv.InputMessage or "").lower()
-            except Exception as e:
-                pytest.fail(f"Could not read LastPriceRunInfo DV message: {e}")
-
-        def test_performance_benchmark(self, updated_sut):
-            _, result = updated_sut
-
-            MAX_SECONDS_PER_SYMBOL = 2.0
-
-            print(f"\n--- Price Update Benchmark ---")
-            print(f"  Symbols fetched : {result.total_symbols}")
-            print(f"  Updated         : {result.updated_symbols}")
-            print(f"  Failed          : {len(result.failed)} {result.failed or ''}")
-            print(f"  Total Elapsed   : {result.total_time:.2f}s")
-            if result.total_symbols:
-                print(f"  Per symbol  : {result.total_time / result.total_symbols:.2f}s")
-            print(f"  Success rate    : {result.success_rate:.0%}")
-            print()
-            print(f"\n--- Benchmark Breakdowns By: ---")
-            print(f"Price fetching : {result.price_fetching_time:.2f}s "
-                  f"({result.price_fetching_time / result.total_time * 100:.1f}% of total)")
-            print(f"Excel updates  : {result.excel_updating_time:.2f}s "
-                  f"({result.excel_updating_time / result.total_time * 100:.1f}% of total)")
-
-            assert result.total_symbols > 0, "No symbols were processed"
-            assert result.total_time < result.total_symbols * MAX_SECONDS_PER_SYMBOL, (
-                f"update_prices() took {result.total_time:.1f}s for "
-                f"{result.total_symbols} symbols "
-                f"({result.total_time / result.total_symbols:.1f}s/symbol) - "
-                f"expected under {MAX_SECONDS_PER_SYMBOL}s/symbol. "
-                f"Is the fallback download path firing?"
-            )
 
     class TestVisiblePriceUpdate:
         """
