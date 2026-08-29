@@ -75,7 +75,7 @@ def connect_database(database: DatabasePath) -> sqlite3.Connection:
 
 
 def initialize_database(database: DatabasePath) -> None:
-    """Create the initial trade-journal schema when it does not exist."""
+    """Create the initial schema when it does not exist."""
     connection = connect_database(database)
     try:
         connection.executescript(SCHEMA_SQL)

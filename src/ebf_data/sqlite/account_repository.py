@@ -3,7 +3,7 @@
 from contextlib import closing
 from uuid import UUID
 
-from ebf_data.sqlite.database import DatabasePath, connect_database
+from ebf_data.sqlite.database import DatabasePath, connect_database, transaction
 from ebf_domain.money.currency import get_currency
 from ebf_domain.money.money import Money
 from ebf_trading.domain.entities.account import Account
@@ -15,7 +15,24 @@ class SQLiteAccountRepository:
     def __init__(self, database: DatabasePath) -> None:
         self._database = database
 
-    def get(self, account_id: UUID) -> Account | None:
+    def ensure_exists(self, acct: Account) -> None:
+        """Insert the account when its UUID is not already present."""
+        with closing(connect_database(self._database)) as connection, transaction(connection):
+            connection.execute(
+                """
+                INSERT INTO accounts (id, owner, balance_minor_units, balance_currency)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT (id) DO NOTHING
+                """,
+                (
+                    str(acct.id),
+                    acct.owner,
+                    acct.balance.amount_cents,
+                    acct.balance.currency.iso_code,
+                ),
+            )
+
+    def get(self, acct_id: UUID) -> Account | None:
         """Return the account with the supplied UUID, if it exists."""
         with closing(connect_database(self._database)) as connection:
             row = connection.execute(
@@ -24,7 +41,7 @@ class SQLiteAccountRepository:
                 FROM accounts
                 WHERE id = ?
                 """,
-                (str(account_id),),
+                (str(acct_id),),
             ).fetchone()
 
         if row is None:
