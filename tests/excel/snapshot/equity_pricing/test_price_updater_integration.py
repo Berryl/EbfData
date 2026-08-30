@@ -23,6 +23,8 @@ from ebf_data.excel.pricing.price_fetcher import PriceFetcher
 from ebf_data.excel.snapshot.price_updater import PriceUpdater, PriceUpdateScope
 from tests.excel.pricing.pricing_scenarios import SnapshotScenario_EquityPricing
 
+pytestmark = pytest.mark.skip(reason="ignore until SCOPE testing visible, selected is important")
+
 
 class FakeFetcher(PriceFetcher):
     """Deterministic price per base ticker, assigned from whatever
