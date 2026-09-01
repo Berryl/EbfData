@@ -2,9 +2,10 @@
 
 import sqlite3
 from contextlib import closing
+from uuid import UUID
 
 from ebf_data.sqlite.database import DatabasePath, connect_database, transaction
-from ebf_data.sqlite.mapping import map_campaign
+from ebf_data.sqlite.mapping import map_campaign, rehydrate_campaign
 from ebf_trading.domain.entities.trade_campaign import TradeCampaign
 from ebf_trading.domain.value_objects.symbol import Symbol
 
@@ -111,3 +112,59 @@ class SQLiteTradeCampaignRepository:
                     rows.event.notes,
                 ),
             )
+
+    def get(self, campaign_id: UUID) -> TradeCampaign | None:
+        """Return the supported persisted campaign shape for a UUID, if present."""
+        with closing(connect_database(self._database)) as connection, transaction(connection):
+            campaign_row = connection.execute(
+                """
+                SELECT
+                    c.id AS campaign_id,
+                    c.account_id AS campaign_account_id,
+                    c.ticker,
+                    c.reference_number,
+                    c.reference_id,
+                    a.id AS account_id,
+                    a.owner AS account_owner,
+                    a.balance_minor_units AS account_balance_minor_units,
+                    a.balance_currency AS account_balance_currency
+                FROM trade_campaigns AS c
+                JOIN accounts AS a ON a.id = c.account_id
+                WHERE c.id = ?
+                """,
+                (str(campaign_id),),
+            ).fetchone()
+            if campaign_row is None:
+                return None
+
+            leg_row = _single_child_row(
+                connection.execute(
+                    "SELECT * FROM trade_legs WHERE campaign_id = ?",
+                    (str(campaign_id),),
+                ).fetchall(),
+                "leg",
+            )
+            order_row = _single_child_row(
+                connection.execute(
+                    "SELECT * FROM orders WHERE campaign_id = ?",
+                    (str(campaign_id),),
+                ).fetchall(),
+                "order",
+            )
+            event_row = _single_child_row(
+                connection.execute(
+                    "SELECT * FROM transaction_events WHERE campaign_id = ?",
+                    (str(campaign_id),),
+                ).fetchall(),
+                "event",
+            )
+
+        return rehydrate_campaign(campaign_row, leg_row, order_row, event_row)
+
+
+def _single_child_row(rows: list[sqlite3.Row], child_name: str) -> sqlite3.Row:
+    if len(rows) != 1:
+        raise ValueError(
+            f"SQLite journal rehydration requires exactly one {child_name}; found {len(rows)}"
+        )
+    return rows[0]

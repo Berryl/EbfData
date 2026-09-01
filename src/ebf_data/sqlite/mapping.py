@@ -2,16 +2,26 @@
 
 from dataclasses import dataclass
 from datetime import datetime
+from sqlite3 import Row
+from uuid import UUID
 
+from ebf_domain.money.currency import get_currency
 from ebf_domain.money.money import Money
+from ebf_trading.domain.entities.account import Account
 from ebf_trading.domain.entities.order import Order
 from ebf_trading.domain.entities.trade_campaign import TradeCampaign
 from ebf_trading.domain.entities.trade_legs.trade_leg import TradeLeg
 from ebf_trading.domain.entities.transaction_events.transaction_event import TransactionEvent
 from ebf_trading.domain.entities.transaction_events.transaction_event_type import TransactionEventType
+from ebf_trading.domain.value_objects.option_specific.expiration_date import ExpirationDate
+from ebf_trading.domain.value_objects.option_specific.option import Option
+from ebf_trading.domain.value_objects.option_specific.option_type import OptionType
+from ebf_trading.domain.value_objects.option_specific.strike import Strike
 from ebf_trading.domain.value_objects.orders.order_type_spec import MarketSpec
 from ebf_trading.domain.value_objects.positions.option_position import OptionPosition
+from ebf_trading.domain.value_objects.positions.position_side import PositionSide
 from ebf_trading.domain.value_objects.quantities.contract_quantity import ContractQuantity
+from ebf_trading.domain.value_objects.symbol import Symbol
 
 
 @dataclass(frozen=True)
@@ -136,6 +146,138 @@ def map_campaign(campaign: TradeCampaign) -> CampaignJournalRows:
             notes=event.notes,
         ),
     )
+
+
+def rehydrate_campaign(
+    campaign_row: Row,
+    leg_row: Row,
+    order_row: Row,
+    event_row: Row,
+) -> TradeCampaign:
+    """Rebuild the supported one-leg filled-option aggregate from SQLite rows."""
+    campaign_id = UUID(str(campaign_row["campaign_id"]))
+    account_id = UUID(str(campaign_row["account_id"]))
+    if UUID(str(campaign_row["campaign_account_id"])) != account_id:
+        raise ValueError("Persisted campaign account does not match the loaded account")
+
+    ticker = str(campaign_row["ticker"])
+    reference_id = str(campaign_row["reference_id"])
+    if _reference_number(ticker, reference_id) != int(campaign_row["reference_number"]):
+        raise ValueError("Persisted campaign reference number does not match its reference ID")
+
+    leg_id = _validate_persisted_associations(
+        campaign_id=campaign_id,
+        leg_row=leg_row,
+        order_row=order_row,
+        event_row=event_row,
+    )
+
+    if str(order_row["order_spec_type"]) != "market":
+        raise ValueError("SQLite journal rehydration currently supports only market orders")
+    event_type = TransactionEventType(str(event_row["event_type"]))
+    if event_type is not TransactionEventType.OPEN:
+        raise ValueError("SQLite journal rehydration currently supports only OPEN events")
+
+    leg_quantity = int(leg_row["contract_quantity"])
+    order_quantity = int(order_row["contract_quantity"])
+    if leg_quantity != order_quantity:
+        raise ValueError("Persisted order quantity must match the opening position quantity")
+    quantity = ContractQuantity(leg_quantity)
+
+    account = Account(
+        owner=str(campaign_row["account_owner"]),
+        balance=_money(
+            campaign_row,
+            amount_key="account_balance_minor_units",
+            currency_key="account_balance_currency",
+        ),
+        id_value=account_id,
+    )
+    campaign = TradeCampaign(
+        account=account,
+        ticker=ticker,
+        reference_id=reference_id,
+        id_value=campaign_id,
+    )
+    position = OptionPosition(
+        option=Option(
+            underlying=Symbol(ticker),
+            strike=Strike(
+                _money(
+                    leg_row,
+                    amount_key="strike_minor_units",
+                    currency_key="strike_currency",
+                )
+            ),
+            option_type=OptionType(str(leg_row["option_type"])),
+            expiration=ExpirationDate(_datetime(leg_row, "expiration_at")),
+        ),
+        side=PositionSide(str(leg_row["position_side"])),
+        quantity=quantity,
+    )
+    order = Order(
+        submission_time=_datetime(order_row, "submission_at"),
+        order_type_spec=MarketSpec(),
+        fill_time=_datetime(order_row, "fill_at"),
+        fill_price=_money(
+            order_row,
+            amount_key="fill_price_minor_units",
+            currency_key="fill_price_currency",
+        ),
+        fees=_money(
+            order_row,
+            amount_key="fees_minor_units",
+            currency_key="fees_currency",
+        ),
+        quantity=quantity,
+    )
+    campaign.rehydrate_filled_opening_trade(
+        position,
+        order,
+        leg_id=leg_id,
+        event_id=UUID(str(event_row["id"])),
+        notes=None if event_row["notes"] is None else str(event_row["notes"]),
+    )
+    return campaign
+
+
+def _validate_persisted_associations(
+    *,
+    campaign_id: UUID,
+    leg_row: Row,
+    order_row: Row,
+    event_row: Row,
+) -> UUID:
+    campaign_text = str(campaign_id)
+    leg_id = UUID(str(leg_row["id"]))
+    leg_text = str(leg_id)
+    order_id = int(order_row["id"])
+    if str(leg_row["campaign_id"]) != campaign_text:
+        raise ValueError("Persisted leg does not belong to the campaign")
+    if (
+        str(order_row["campaign_id"]) != campaign_text
+        or str(order_row["leg_id"]) != leg_text
+    ):
+        raise ValueError("Persisted order associations do not match the campaign and leg")
+    if (
+        str(event_row["campaign_id"]) != campaign_text
+        or str(event_row["leg_id"]) != leg_text
+        or int(event_row["order_id"]) != order_id
+    ):
+        raise ValueError("Persisted event associations do not match the campaign, leg, and order")
+    return leg_id
+
+
+def _money(row: Row, *, amount_key: str, currency_key: str) -> Money:
+    currency = get_currency(str(row[currency_key]))
+    return Money.from_cents(int(row[amount_key]), currency)
+
+
+def _datetime(row: Row, key: str) -> datetime:
+    value = datetime.fromisoformat(str(row[key]))
+    if value.utcoffset() is None:
+        raise ValueError(f"Persisted datetime '{key}' must include a UTC offset")
+    return value
 
 
 def _validate_associations(

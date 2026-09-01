@@ -3,7 +3,7 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing
 from datetime import date, datetime
 from pathlib import Path
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -19,7 +19,12 @@ from ebf_trading.application import CreateTradeCampaign, FilledOptionTradeInput
 from ebf_trading.domain.entities.account import Account
 from ebf_trading.domain.entities.trade_campaign import TradeCampaign
 from ebf_trading.domain.entities.trade_legs.trade_leg import TradeLeg
+from ebf_trading.domain.entities.transaction_events.transaction_event_type import (
+    TransactionEventType,
+)
 from ebf_trading.domain.value_objects.option_specific.option_type import OptionType
+from ebf_trading.domain.value_objects.orders.order_type_spec import MarketSpec
+from ebf_trading.domain.value_objects.positions.option_position import OptionPosition
 from ebf_trading.domain.value_objects.positions.position_side import PositionSide
 
 ACCOUNT_ID = UUID("12345678-1234-5678-1234-567812345678")
@@ -142,6 +147,83 @@ def test_add_persists_the_initial_creation_aggregate(database: Path) -> None:
         "event_type": "open",
         "notes": None,
     }
+
+
+def test_get_round_trips_the_supported_campaign(database: Path) -> None:
+    campaign, leg = create_campaign(database)
+    persisted_note = "Imported DEV fill"
+    with closing(connect_database(database)) as connection, transaction(connection):
+        connection.execute(
+            "UPDATE transaction_events SET notes = ? WHERE id = ?",
+            (persisted_note, str(campaign.events[0].id)),
+        )
+
+    loaded = SQLiteTradeCampaignRepository(database).get(campaign.id)
+
+    assert loaded is not None
+    assert loaded.id == campaign.id
+    assert loaded.account.id == campaign.account.id
+    assert loaded.account.owner == campaign.account.owner
+    assert loaded.account.balance == campaign.account.balance
+    assert loaded.ticker == campaign.ticker
+    assert loaded.reference_id == campaign.reference_id
+
+    (loaded_leg,) = loaded.legs
+    assert loaded_leg.id == leg.id
+    assert isinstance(loaded_leg.position, OptionPosition)
+    loaded_position = loaded_leg.position
+    original_position = leg.position
+    assert isinstance(original_position, OptionPosition)
+    assert loaded_position.option.underlying == original_position.option.underlying
+    assert loaded_position.option.option_type == original_position.option.option_type
+    assert loaded_position.option.strike == original_position.option.strike
+    assert loaded_position.option.expiration == original_position.option.expiration
+    assert loaded_position.side == original_position.side
+    assert loaded_position.quantity == original_position.quantity
+    assert loaded_position.is_open
+    assert loaded_position.entry_time == original_position.entry_time
+    assert loaded_position.entry_time is not None
+    assert loaded_position.entry_time.utcoffset() is not None
+    assert (loaded_entry_quote := loaded_position.quote_history.latest) is not None
+    assert loaded_entry_quote.last_price == Money.mint("1.20")
+
+    ((loaded_order_leg_id, loaded_order),) = loaded.orders
+    original_order = campaign.orders[0][1]
+    assert loaded_order_leg_id == loaded_leg.id
+    assert isinstance(loaded_order.order_type_spec, MarketSpec)
+    assert loaded_order.submission_time == original_order.submission_time
+    assert loaded_order.fill_time == original_order.fill_time
+    assert loaded_order.submission_time is not None
+    assert loaded_order.submission_time.utcoffset() is not None
+    assert loaded_order.fill_time is not None
+    assert loaded_order.fill_time.utcoffset() is not None
+    assert loaded_order.fill_price == original_order.fill_price
+    assert loaded_order.fees == original_order.fees
+    assert loaded_order.quantity == original_order.quantity
+
+    (loaded_event,) = loaded.events
+    assert loaded_event.id == campaign.events[0].id
+    assert loaded_event.trade_id == loaded.id
+    assert loaded_event.leg_id == loaded_leg.id
+    assert loaded_event.event_type is TransactionEventType.OPEN
+    assert loaded_event.notes == persisted_note
+    assert loaded_event.order is loaded.orders[0][1]
+
+
+def test_get_returns_none_for_an_unknown_campaign(database: Path) -> None:
+    assert SQLiteTradeCampaignRepository(database).get(uuid4()) is None
+
+
+def test_get_rejects_an_incomplete_child_shape(database: Path) -> None:
+    campaign, _ = create_campaign(database)
+    with closing(connect_database(database)) as connection, transaction(connection):
+        connection.execute(
+            "DELETE FROM transaction_events WHERE campaign_id = ?",
+            (str(campaign.id),),
+        )
+
+    with pytest.raises(ValueError, match="exactly one event; found 0"):
+        SQLiteTradeCampaignRepository(database).get(campaign.id)
 
 
 def test_add_rolls_back_every_aggregate_row_when_event_insert_fails(database: Path) -> None:
