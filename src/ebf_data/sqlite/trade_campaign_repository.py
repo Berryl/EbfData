@@ -161,6 +161,18 @@ class SQLiteTradeCampaignRepository:
 
         return rehydrate_campaign(campaign_row, leg_row, order_row, event_row)
 
+    def get_by_reference_id(self, reference_id: str) -> TradeCampaign | None:
+        """Return the campaign with an exact persisted business reference, if present."""
+        with closing(connect_database(self._database)) as connection:
+            row = connection.execute(
+                "SELECT id FROM trade_campaigns WHERE reference_id = ?",
+                (reference_id,),
+            ).fetchone()
+
+        if row is None:
+            return None
+        return self.get(UUID(str(row["id"])))
+
 
 def _single_child_row(rows: list[sqlite3.Row], child_name: str) -> sqlite3.Row:
     if len(rows) != 1:

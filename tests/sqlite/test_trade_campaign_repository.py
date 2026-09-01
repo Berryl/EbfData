@@ -6,14 +6,6 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
-
-from ebf_data.sqlite import (
-    SQLiteAccountRepository,
-    SQLiteTradeCampaignRepository,
-    connect_database,
-    initialize_database,
-)
-from ebf_data.sqlite.database import transaction
 from ebf_domain.money.money import Money
 from ebf_trading.application import CreateTradeCampaign, FilledOptionTradeInput
 from ebf_trading.domain.entities.account import Account
@@ -26,6 +18,14 @@ from ebf_trading.domain.value_objects.option_specific.option_type import OptionT
 from ebf_trading.domain.value_objects.orders.order_type_spec import MarketSpec
 from ebf_trading.domain.value_objects.positions.option_position import OptionPosition
 from ebf_trading.domain.value_objects.positions.position_side import PositionSide
+
+from ebf_data.sqlite import (
+    SQLiteAccountRepository,
+    SQLiteTradeCampaignRepository,
+    connect_database,
+    initialize_database,
+)
+from ebf_data.sqlite.database import transaction
 
 ACCOUNT_ID = UUID("12345678-1234-5678-1234-567812345678")
 
@@ -82,11 +82,11 @@ def create_campaign(database: Path) -> tuple[TradeCampaign, TradeLeg]:
 
 
 def test_allocate_reference_id_is_per_symbol_and_normalized(database: Path) -> None:
-    repository = SQLiteTradeCampaignRepository(database)
+    repo = SQLiteTradeCampaignRepository(database)
 
-    assert repository.allocate_reference_id(" xyz ") == "XYZ1"
-    assert repository.allocate_reference_id("XYZ") == "XYZ2"
-    assert repository.allocate_reference_id("abc") == "ABC1"
+    assert repo.allocate_reference_id(" xyz ") == "XYZ1"
+    assert repo.allocate_reference_id("XYZ") == "XYZ2"
+    assert repo.allocate_reference_id("abc") == "ABC1"
 
 
 def test_allocate_reference_id_is_atomic_across_connections(database: Path) -> None:
@@ -214,16 +214,37 @@ def test_get_returns_none_for_an_unknown_campaign(database: Path) -> None:
     assert SQLiteTradeCampaignRepository(database).get(uuid4()) is None
 
 
+def test_get_by_reference_id_matches_uuid_lookup(database: Path) -> None:
+    campaign, _ = create_campaign(database)
+    repo = SQLiteTradeCampaignRepository(database)
+
+    by_uuid: TradeCampaign = repo.get(campaign.id)
+    by_ref_id: TradeCampaign = repo.get_by_reference_id(campaign.reference_id)
+
+    assert by_uuid is not None
+    assert by_ref_id is not None
+    assert by_ref_id == by_uuid
+    assert by_ref_id.reference_id == campaign.reference_id
+    assert by_ref_id.legs[0].id == by_uuid.legs[0].id
+    assert by_ref_id.events[0].id == by_uuid.events[0].id
+
+
+def test_get_by_reference_id_returns_none_for_an_unknown_reference(database: Path) -> None:
+    assert SQLiteTradeCampaignRepository(database).get_by_reference_id("MISSING1") is None
+
+
 def test_get_rejects_an_incomplete_child_shape(database: Path) -> None:
     campaign, _ = create_campaign(database)
     with closing(connect_database(database)) as connection, transaction(connection):
         connection.execute(
-            "DELETE FROM transaction_events WHERE campaign_id = ?",
-            (str(campaign.id),),
+            "DELETE FROM transaction_events WHERE campaign_id = ?", (str(campaign.id),),
         )
 
     with pytest.raises(ValueError, match="exactly one event; found 0"):
         SQLiteTradeCampaignRepository(database).get(campaign.id)
+
+    with pytest.raises(ValueError, match="exactly one event; found 0"):
+        SQLiteTradeCampaignRepository(database).get_by_reference_id(campaign.reference_id)
 
 
 def test_add_rolls_back_every_aggregate_row_when_event_insert_fails(database: Path) -> None:
@@ -231,7 +252,8 @@ def test_add_rolls_back_every_aggregate_row_when_event_insert_fails(database: Pa
         connection.execute(
             """
             CREATE TRIGGER reject_transaction_event
-            BEFORE INSERT ON transaction_events
+                BEFORE INSERT
+                ON transaction_events
             BEGIN
                 SELECT RAISE(ABORT, 'event insert rejected');
             END
