@@ -4,10 +4,10 @@ from ebf_data.excel.snapshot.option_price_updater import OptionPriceUpdater, Opt
 from ebf_data.excel.snapshot.price_updater import PriceUpdater
 from excel.pricing.pricing_scenarios import SnapshotScenario_Pricing
 
-EQUITY_SYMBOL_COUNT = 32
+EQUITY_SYMBOL_COUNT = 30
 LONG_PUT_SYMBOL_COUNT = 1
 SHORT_PUT_SYMBOL_COUNT = 9
-LONG_CALL_SYMBOL_COUNT = 5
+LONG_CALL_SYMBOL_COUNT = 4
 SHORT_CALL_SYMBOL_COUNT = 5
 
 @pytest.mark.integration
