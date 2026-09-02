@@ -55,6 +55,8 @@ class SQLiteTradeCampaignRepository:
                     rows.campaign.reference_id,
                 ),
             )
+            # PyCharm's configured DEV data source predates the greenfield exit_at column.
+            # noinspection SqlResolve
             connection.execute(
                 """
                 INSERT INTO trade_legs (
