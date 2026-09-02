@@ -59,8 +59,9 @@ class SQLiteTradeCampaignRepository:
                 """
                 INSERT INTO trade_legs (
                     id, campaign_id, option_type, strike_minor_units,
-                    strike_currency, expiration_at, position_side, contract_quantity
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    strike_currency, expiration_at, position_side, contract_quantity,
+                    exit_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     rows.leg.id,
@@ -71,6 +72,7 @@ class SQLiteTradeCampaignRepository:
                     rows.leg.expiration_at,
                     rows.leg.position_side,
                     rows.leg.contract_quantity,
+                    rows.leg.exit_at,
                 ),
             )
             order_cursor = connection.execute(

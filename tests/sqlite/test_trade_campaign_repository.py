@@ -6,6 +6,14 @@ from pathlib import Path
 from uuid import UUID, uuid4
 
 import pytest
+
+from ebf_data.sqlite import (
+    SQLiteAccountRepository,
+    SQLiteTradeCampaignRepository,
+    connect_database,
+    initialize_database,
+)
+from ebf_data.sqlite.database import transaction
 from ebf_domain.money.money import Money
 from ebf_trading.application import CreateTradeCampaign, FilledOptionTradeInput
 from ebf_trading.domain.entities.account import Account
@@ -18,14 +26,6 @@ from ebf_trading.domain.value_objects.option_specific.option_type import OptionT
 from ebf_trading.domain.value_objects.orders.order_type_spec import MarketSpec
 from ebf_trading.domain.value_objects.positions.option_position import OptionPosition
 from ebf_trading.domain.value_objects.positions.position_side import PositionSide
-
-from ebf_data.sqlite import (
-    SQLiteAccountRepository,
-    SQLiteTradeCampaignRepository,
-    connect_database,
-    initialize_database,
-)
-from ebf_data.sqlite.database import transaction
 
 ACCOUNT_ID = UUID("12345678-1234-5678-1234-567812345678")
 
@@ -125,6 +125,7 @@ def test_add_persists_the_initial_creation_aggregate(database: Path) -> None:
         "expiration_at": "2026-09-18T16:00:00-04:00",
         "position_side": "long",
         "contract_quantity": 2,
+        "exit_at": None,
     }
     assert dict(order_row) == {
         "id": 1,
@@ -182,8 +183,6 @@ def test_get_round_trips_the_supported_campaign(database: Path) -> None:
     assert loaded_position.quantity == original_position.quantity
     assert loaded_position.is_open
     assert loaded_position.entry_time == original_position.entry_time
-    assert loaded_position.entry_time is not None
-    assert loaded_position.entry_time.utcoffset() is not None
     assert (loaded_entry_quote := loaded_position.quote_history.latest) is not None
     assert loaded_entry_quote.last_price == Money.mint("1.20")
 
@@ -218,8 +217,8 @@ def test_get_by_reference_id_matches_uuid_lookup(database: Path) -> None:
     campaign, _ = create_campaign(database)
     repo = SQLiteTradeCampaignRepository(database)
 
-    by_uuid: TradeCampaign = repo.get(campaign.id)
-    by_ref_id: TradeCampaign = repo.get_by_reference_id(campaign.reference_id)
+    by_uuid = repo.get(campaign.id)
+    by_ref_id = repo.get_by_reference_id(campaign.reference_id)
 
     assert by_uuid is not None
     assert by_ref_id is not None

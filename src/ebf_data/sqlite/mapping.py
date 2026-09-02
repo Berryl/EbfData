@@ -43,6 +43,7 @@ class LegRow:
     expiration_at: str
     position_side: str
     contract_quantity: int
+    exit_at: str | None
 
 
 @dataclass(frozen=True)
@@ -102,6 +103,8 @@ def map_campaign(campaign: TradeCampaign) -> CampaignJournalRows:
         raise ValueError("Retained order quantity must match the opening position quantity")
     if position.entry_time != fill_time:
         raise ValueError("Opening position time must match the retained order fill time")
+    if not position.is_open:
+        raise ValueError("Initial SQLite journal persistence supports only open positions")
     if position.entry_greeks is not None:
         raise ValueError("Initial SQLite journal persistence does not store Greeks")
 
@@ -125,6 +128,7 @@ def map_campaign(campaign: TradeCampaign) -> CampaignJournalRows:
             expiration_at=_datetime_text(position.option.expiration.deadline),
             position_side=position.side.value,
             contract_quantity=position.quantity.value,
+            exit_at=None,
         ),
         order=OrderRow(
             campaign_id=campaign_id,
@@ -174,6 +178,8 @@ def rehydrate_campaign(
 
     if str(order_row["order_spec_type"]) != "market":
         raise ValueError("SQLite journal rehydration currently supports only market orders")
+    if leg_row["exit_at"] is not None:
+        raise ValueError("SQLite journal rehydration currently supports only open legs")
     event_type = TransactionEventType(str(event_row["event_type"]))
     if event_type is not TransactionEventType.OPEN:
         raise ValueError("SQLite journal rehydration currently supports only OPEN events")

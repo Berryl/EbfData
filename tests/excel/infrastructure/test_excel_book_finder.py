@@ -16,7 +16,7 @@ def make_app(pid, books):
         book.app = app
     return app
 
-MODULE_PATH = "ebf_data.excel.infrastructure.excel_book_finder."
+MODULE_PATH = "src.ebf_data.excel.infrastructure.excel_book_finder."
 
 @pytest.mark.integration
 class TestWbFinder:

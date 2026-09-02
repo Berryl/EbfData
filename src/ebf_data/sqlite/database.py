@@ -37,7 +37,8 @@ CREATE TABLE IF NOT EXISTS trade_legs (
     strike_currency TEXT NOT NULL,
     expiration_at TEXT NOT NULL,
     position_side TEXT NOT NULL,
-    contract_quantity INTEGER NOT NULL
+    contract_quantity INTEGER NOT NULL,
+    exit_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS orders (
