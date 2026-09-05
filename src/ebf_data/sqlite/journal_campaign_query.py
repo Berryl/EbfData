@@ -3,13 +3,14 @@
 from contextlib import closing
 from uuid import UUID
 
-from ebf_data.sqlite.database import DatabasePath, connect_database
 from ebf_trading.application.queries import (
+    CampaignChoice,
+    CampaignChoices,
     CampaignStatusFilter,
-    JournalCampaignChoice,
-    JournalCampaignChoices,
 )
 from ebf_trading.domain.value_objects.symbol import Symbol
+
+from ebf_data.sqlite.database import DatabasePath, connect_database
 
 _ACTIVE_CLAUSE = """
 EXISTS (
@@ -44,47 +45,42 @@ class SQLiteJournalCampaignQuery:
     """Populate journal selectors without rehydrating full campaign aggregates."""
 
     def __init__(self, database: DatabasePath) -> None:
-        self._database = database
+        self._db = database
 
-    def list_symbols(
-        self,
-        status: CampaignStatusFilter = CampaignStatusFilter.ACTIVE,
-    ) -> tuple[str, ...]:
+    def list_symbols(self, status: CampaignStatusFilter = CampaignStatusFilter.ACTIVE) -> tuple[str, ...]:
         """Return matching symbols in alphabetical order."""
         status_clause = _STATUS_CLAUSES[status]
-        with closing(connect_database(self._database)) as connection:
-            rows = connection.execute(
+        with closing(connect_database(self._db)) as conn:
+            rows = conn.execute(
                 f"""
                 SELECT DISTINCT campaign.ticker
                 FROM trade_campaigns AS campaign
                 WHERE {status_clause}
-                ORDER BY campaign.ticker COLLATE NOCASE ASC
+                ORDER BY campaign.ticker COLLATE NOCASE
                 """
             ).fetchall()
         return tuple(str(row["ticker"]) for row in rows)
 
     def list_campaigns(
-        self,
-        symbol: str,
-        status: CampaignStatusFilter = CampaignStatusFilter.ACTIVE,
-    ) -> JournalCampaignChoices:
+            self, symbol: str, status: CampaignStatusFilter = CampaignStatusFilter.ACTIVE,
+    ) -> CampaignChoices:
         """Return matching campaigns in numeric reference order."""
         normalized_symbol = Symbol(symbol).value
         status_clause = _STATUS_CLAUSES[status]
-        with closing(connect_database(self._database)) as connection:
+        with closing(connect_database(self._db)) as connection:
             rows = connection.execute(
                 f"""
                 SELECT campaign.id, campaign.reference_id
                 FROM trade_campaigns AS campaign
                 WHERE campaign.ticker = ?
                   AND {status_clause}
-                ORDER BY campaign.reference_number ASC
+                ORDER BY campaign.reference_number
                 """,
                 (normalized_symbol,),
             ).fetchall()
-        return JournalCampaignChoices(
+        return CampaignChoices(
             tuple(
-                JournalCampaignChoice(
+                CampaignChoice(
                     campaign_id=UUID(str(row["id"])),
                     reference_id=str(row["reference_id"]),
                 )

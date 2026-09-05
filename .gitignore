@@ -209,3 +209,6 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Local database used by PyCharm SQL inspections
+/runtime/pycharm-schema.sqlite*
