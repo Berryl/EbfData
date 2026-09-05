@@ -1,3 +1,5 @@
+from typing import Any
+
 import xlwings as xw
 
 
@@ -27,5 +29,28 @@ def find_open_book(workbook_name: str) -> xw.Book:
 
     return matches[0]
 
-def get_named_value(sheet: xw.Sheet, name: str):
-    return sheet.range(name).value
+
+def get_named_value(sheet: xw.Sheet, name: str, is_constant: bool = False) -> Any:
+    """Return a defined name's range value, or its formula if is_constant=True."""
+    nm = _resolve_name(sheet, name)
+    if is_constant:
+        return nm.refers_to
+    return nm.refers_to_range.value
+
+
+def _resolve_name(sheet: xw.Sheet, name: str) -> xw.Name:
+    if name in sheet.names:
+        return sheet.names[name]
+
+    wb_names = sheet.book.names
+    if name in wb_names:
+        return wb_names[name]
+
+    sheet_scope = f"{sheet.name}!{name}"
+    if sheet_scope in wb_names:
+        return wb_names[sheet_scope]
+
+    raise KeyError(
+        f"Defined name {name!r} not found on sheet {sheet.name!r} "
+        f"or in workbook {sheet.book.name!r}"
+    )

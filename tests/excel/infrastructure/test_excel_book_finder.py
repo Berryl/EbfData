@@ -1,8 +1,9 @@
+import datetime
 from types import SimpleNamespace
 
 import pytest
 
-from ebf_data.excel.cagr.cagr_table import ACB, CAGR_WB, CAGR_WKS
+from ebf_data.excel.cagr.cagr_table import MOCK_TODAY, CAGR_WB, CAGR_WKS
 from ebf_data.excel.infrastructure.excel_book_finder import find_open_book, get_named_value
 
 
@@ -100,5 +101,5 @@ class TestWbFinder:
         def test_can_get_named_value(self):
             wb = find_open_book(CAGR_WB)
             sheet = wb.sheets[CAGR_WKS]
-            value = get_named_value(sheet, ACB)
-            assert value > 0
+            value = get_named_value(sheet, MOCK_TODAY)
+            assert value is not None

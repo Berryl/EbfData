@@ -10,7 +10,7 @@ from ebf_data.excel.infrastructure.xl_table_base import xlTable
 CAGR_WB = "CAGR.xlsm"
 CAGR_WKS = "CAGR"
 CAGR_TABLE = "CagrTable"
-ACB = "TacticalAcb"  # defined name
+MOCK_TODAY = "MockToday"  # defined name
 
 
 class CagrTable(xlTable):

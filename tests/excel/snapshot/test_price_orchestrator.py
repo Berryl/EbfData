@@ -74,8 +74,8 @@ class TestPriceOrchestrator:
     # endregion
 
     class TestWiring:
-        def test_all_collaborators_are_called_and_results_are_exported(self, sut, price_updater, option_updater,
-                                                                       exporter):
+        def test_all_collaborators_are_called_and_results_are_exported(
+                self, sut, price_updater, option_updater,exporter):
             equity_fetch = (PriceUpdateResult(total_symbols=1), [SymbolPriceOutcome("AAPL", 200.0, True)])
             option_fetch = _option_fetch()
 
@@ -87,7 +87,12 @@ class TestPriceOrchestrator:
 
             price_updater.fetch_prices.assert_called_once_with()
             option_updater.fetch_all_option_prices.assert_called_once_with()
-            exporter.export.assert_called_once_with(equity_fetch, option_fetch)
+            exporter.export.assert_called_once_with(
+                equity_fetch,
+                option_fetch,
+                equity_attempted=True,
+                attempted_option_types=None,
+            )
             assert summary.export_path == "/fake/path/snapshot.json"
 
         def test_default_collaborators_are_wired_to_the_given_snapshot(self, snapshot):
