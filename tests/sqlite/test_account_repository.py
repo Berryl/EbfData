@@ -5,10 +5,10 @@ from uuid import UUID, uuid4
 import pytest
 
 from ebf_data.sqlite import SQLiteAccountRepository, connect_database, initialize_database
-from ebf_data.sqlite.database import transaction
 from ebf_domain.money.currency import USD
 from ebf_domain.money.money import Money
 from ebf_trading.domain.entities.account import Account
+from tests.sqlite.support import insert_account
 
 
 @pytest.fixture
@@ -17,6 +17,7 @@ def database(tmp_path: Path) -> Path:
     initialize_database(path)
     return path
 
+
 @pytest.fixture
 def sam_account() -> Account:
     return Account(
@@ -24,21 +25,6 @@ def sam_account() -> Account:
         balance=Money.mint("100"),
         id_value=UUID("12345678-1234-5678-1234-567812345678"),
     )
-
-def insert_account(database: Path, acct: Account) -> None:
-    with closing(connect_database(database)) as connection, transaction(connection):
-        connection.execute(
-            """
-            INSERT INTO accounts (id, owner, balance_minor_units, balance_currency)
-            VALUES (?, ?, ?, ?)
-            """,
-            (
-                str(acct.id),
-                acct.owner,
-                acct.balance.amount_cents,
-                acct.balance.currency.iso_code,
-            ),
-        )
 
 
 def test_can_rehydrate_account_from_persisted_id(database: Path, sam_account: Account) -> None:

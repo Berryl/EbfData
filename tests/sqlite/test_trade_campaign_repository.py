@@ -26,6 +26,7 @@ from ebf_trading.domain.value_objects.option_specific.option_type import OptionT
 from ebf_trading.domain.value_objects.orders.order_type_spec import MarketSpec
 from ebf_trading.domain.value_objects.positions.option_position import OptionPosition
 from ebf_trading.domain.value_objects.positions.position_side import PositionSide
+from tests.sqlite.support import insert_account
 
 ACCOUNT_ID = UUID("12345678-1234-5678-1234-567812345678")
 
@@ -34,29 +35,13 @@ ACCOUNT_ID = UUID("12345678-1234-5678-1234-567812345678")
 def database(tmp_path: Path) -> Path:
     path = tmp_path / "journal.sqlite3"
     initialize_database(path)
-    insert_account(path)
-    return path
-
-
-def insert_account(database: Path) -> None:
     account = Account(
         owner="Trade Owner",
         balance=Money.mint("10000"),
         id_value=ACCOUNT_ID,
     )
-    with closing(connect_database(database)) as connection, transaction(connection):
-        connection.execute(
-            """
-            INSERT INTO accounts (id, owner, balance_minor_units, balance_currency)
-            VALUES (?, ?, ?, ?)
-            """,
-            (
-                str(account.id),
-                account.owner,
-                account.balance.amount_cents,
-                account.balance.currency.iso_code,
-            ),
-        )
+    insert_account(path, account)
+    return path
 
 
 def trade_input() -> FilledOptionTradeInput:
@@ -236,7 +221,8 @@ def test_get_rejects_an_incomplete_child_shape(database: Path) -> None:
     campaign, _ = create_campaign(database)
     with closing(connect_database(database)) as connection, transaction(connection):
         connection.execute(
-            "DELETE FROM transaction_events WHERE campaign_id = ?", (str(campaign.id),),
+            "DELETE FROM transaction_events WHERE campaign_id = ?",
+            (str(campaign.id),),
         )
 
     with pytest.raises(ValueError, match="exactly one event; found 0"):
