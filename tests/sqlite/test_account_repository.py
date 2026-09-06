@@ -12,7 +12,7 @@ from tests.sqlite.support import insert_account
 
 
 @pytest.fixture
-def database(tmp_path: Path) -> Path:
+def db(tmp_path: Path) -> Path:
     path = tmp_path / "journal.sqlite3"
     initialize_database(path)
     return path
@@ -27,57 +27,56 @@ def sam_account() -> Account:
     )
 
 
-def test_can_rehydrate_account_from_persisted_id(database: Path, sam_account: Account) -> None:
-    insert_account(database, sam_account)
+def test_can_rehydrate_account_from_persisted_id(db: Path, sam_account: Account) -> None:
+    insert_account(db, sam_account)
 
-    loaded = SQLiteAccountRepository(database).get(sam_account.id)
+    sams_id = sam_account.id
+    fetched = SQLiteAccountRepository(db).get(sams_id)
 
-    assert loaded is not None
-    assert loaded.id == sam_account.id
-    assert loaded.owner == sam_account.owner
-    assert loaded.balance == sam_account.balance
+    assert fetched is not None
+    assert fetched.id == sams_id and fetched.owner == sam_account.owner and fetched.balance == sam_account.balance
 
 
-def test_ensure_exists_is_idempotent(database: Path, sam_account: Account) -> None:
-    repository = SQLiteAccountRepository(database)
+def test_ensure_exists_is_idempotent(db: Path, sam_account: Account) -> None:
+    repo = SQLiteAccountRepository(db)
 
-    repository.ensure_exists(sam_account)
-    repository.ensure_exists(sam_account)
+    repo.ensure_exists(sam_account)
+    repo.ensure_exists(sam_account)
 
-    with closing(connect_database(database)) as connection:
+    with closing(connect_database(db)) as connection:
         count = connection.execute("SELECT COUNT(*) FROM accounts").fetchone()[0]
-
-    loaded = repository.get(sam_account.id)
     assert count == 1
-    assert loaded is not None
-    assert loaded.id == sam_account.id
-    assert loaded.owner == sam_account.owner
-    assert loaded.balance == sam_account.balance
+
+    sams_id = sam_account.id
+    fetched = repo.get(sams_id)
+
+    assert fetched is not None
+    assert fetched.id == sams_id and fetched.owner == sam_account.owner and fetched.balance == sam_account.balance
 
 
-def test_ensure_exists_does_not_modify_an_existing_account(database: Path, sam_account: Account) -> None:
+def test_ensure_exists_does_not_modify_an_existing_account(db: Path, sam_account: Account) -> None:
     julie_account = Account(
         owner="Julie",
         balance=Money.from_cents(5, USD),
         id_value=sam_account.id,
     )
-    insert_account(database, sam_account)
+    insert_account(db, sam_account)
 
-    repository = SQLiteAccountRepository(database)
-    repository.ensure_exists(julie_account)
+    repo = SQLiteAccountRepository(db)
+    repo.ensure_exists(julie_account)
 
-    loaded = repository.get(sam_account.id)
-    assert loaded is not None
-    assert loaded.owner == sam_account.owner
-    assert loaded.balance == sam_account.balance
-
-
-def test_get_returns_none_for_unknown_account(database: Path) -> None:
-    assert SQLiteAccountRepository(database).get(uuid4()) is None
+    fetched = repo.get(sam_account.id)
+    assert fetched is not None
+    assert fetched.owner == sam_account.owner and fetched.balance == sam_account.balance
 
 
-def test_connections_enable_foreign_keys(database: Path) -> None:
-    with closing(connect_database(database)) as connection:
+def test_get_returns_none_for_unknown_account(db: Path) -> None:
+    unknown_user = uuid4()
+    assert SQLiteAccountRepository(db).get(unknown_user) is None
+
+
+def test_connections_enable_foreign_keys(db: Path) -> None:
+    with closing(connect_database(db)) as connection:
         enabled = connection.execute("PRAGMA foreign_keys").fetchone()[0]
 
     assert enabled == 1
