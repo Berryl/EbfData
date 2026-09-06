@@ -12,6 +12,7 @@ from ebf_data.sqlite import SQLiteJournalCampaignQuery, initialize_database
 from tests.sqlite.support import insert_account, insert_query_campaign
 
 
+# region fixture & setup
 @pytest.fixture
 def db(tmp_path: Path) -> Path:
     path = tmp_path / "journal.sqlite3"
@@ -26,6 +27,7 @@ def db(tmp_path: Path) -> Path:
     insert_query_campaign(path, acct_id=acct.id, ticker="FCX", ref_number=2, leg_states=("open",))
     insert_query_campaign(path, acct_id=acct.id, ticker="FCX", ref_number=1, leg_states=("closed",))
     return path
+# endregion
 
 
 class TestSQLiteJournalCampaignQuery:
@@ -55,12 +57,10 @@ class TestSQLiteJournalCampaignQuery:
             refs = [c.reference_id for c in sut.list_campaigns("FCX", CampaignStatusFilter.CLOSED).campaigns]
             assert refs == ["FCX1"]
 
-        class TestSymbolNormalization:
-            """Symbol input is normalized and validated consistently."""
-
-            def test_symbol_is_normalized(self, sut: CampaignQuery) -> None:
-                refs = [c.reference_id for c in sut.list_campaigns(" fcx ").campaigns]
-                assert refs == ["FCX2", "FCX10"]
+        def test_symbol_is_normalized(self, sut: CampaignQuery) -> None:
+            """Symbol input is normalized and validated consistently by Symbol object."""
+            refs = [c.reference_id for c in sut.list_campaigns(" fcx ").campaigns]
+            assert refs == ["FCX2", "FCX10"]
 
     class TestStatusFromLegs:
 
