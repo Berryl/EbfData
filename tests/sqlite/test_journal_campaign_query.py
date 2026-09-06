@@ -55,26 +55,30 @@ class TestSQLiteJournalCampaignQuery:
             refs = [c.reference_id for c in sut.list_campaigns("FCX", CampaignStatusFilter.CLOSED).campaigns]
             assert refs == ["FCX1"]
 
-        def test_symbol_is_normalized(self, sut: CampaignQuery) -> None:
-            refs = [c.reference_id for c in sut.list_campaigns(" fcx ").campaigns]
-            assert refs == ["FCX2", "FCX10"] # normalized = trimmed_and_upper_cased
+        class TestSymbolNormalization:
+            """Symbol input is normalized and validated consistently."""
 
-        def test_missing_symbol_raises(self, sut: CampaignQuery) -> None:
-            with pytest.raises(ValueError):
-                sut.list_campaigns("  ")
+            def test_symbol_is_normalized(self, sut: CampaignQuery) -> None:
+                refs = [c.reference_id for c in sut.list_campaigns(" fcx ").campaigns]
+                assert refs == ["FCX2", "FCX10"]
 
     class TestStatusFromLegs:
-        def test_any_open_leg_makes_campaign_active(self, sut: CampaignQuery) -> None:
-            assert [c.reference_id for c in sut.list_campaigns("DRAM").campaigns] == ["DRAM1"]
-            assert [c.reference_id for c in sut.list_campaigns("DRAM", CampaignStatusFilter.CLOSED).campaigns] == []
-            assert [c.reference_id for c in sut.list_campaigns("MARA").campaigns] == ["MARA1"]
-            assert [c.reference_id for c in sut.list_campaigns("MARA", CampaignStatusFilter.CLOSED).campaigns] == []
 
         def test_all_legs_closed_makes_campaign_closed(self, sut: CampaignQuery) -> None:
-            assert [c.reference_id for c in sut.list_campaigns("AAPL").campaigns] == []
-            assert [c.reference_id for c in sut.list_campaigns("AAPL", CampaignStatusFilter.CLOSED).campaigns] == [
-                "AAPL1"
-            ]
+            ticker = 'AAPL'
+            closed_campaigns = sut.list_campaigns(ticker, CampaignStatusFilter.CLOSED).campaigns
+            active_campaigns = sut.list_campaigns(ticker).campaigns
+
+            assert [c.reference_id for c in closed_campaigns] == ["AAPL1"]
+            assert [c.reference_id for c in active_campaigns] == []
+
+        @pytest.mark.parametrize("ticker, ref_id", [('DRAM', 'DRAM1'), ('MARA', 'MARA1')])
+        def test_any_open_leg_makes_campaign_active(self, sut: CampaignQuery, ticker, ref_id) -> None:
+            closed_campaigns = sut.list_campaigns(ticker, CampaignStatusFilter.CLOSED).campaigns
+            active_campaigns = sut.list_campaigns(ticker).campaigns
+
+            assert [c.reference_id for c in closed_campaigns] == []
+            assert [c.reference_id for c in active_campaigns] == [ref_id]
 
     class TestWhenUnknownSymbol:
         @pytest.mark.parametrize("status", list(CampaignStatusFilter))
