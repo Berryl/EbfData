@@ -1,4 +1,3 @@
-import datetime
 from types import SimpleNamespace
 
 import pytest
@@ -16,6 +15,7 @@ def make_app(pid, books):
     for book in books:
         book.app = app
     return app
+
 
 @pytest.mark.integration
 class TestWbFinder:

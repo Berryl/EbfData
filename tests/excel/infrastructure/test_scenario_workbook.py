@@ -4,16 +4,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from tests.excel.infrastructure.fixtures import scenario_workbook
 from tests.excel.infrastructure.fixtures.scenario_workbook import (
     open_scenario_workbook,
     close_scenario_workbook,
     _resolved,
 )
-
-
-# region Module path for monkeypatching
-MODULE_PATH = "tests.excel.infrastructure.fixtures.scenario_workbook."
-# endregion
 
 
 # region Fixtures
@@ -45,6 +41,14 @@ def make_book(fullname: str):
 
 def make_app(books=None):
     return SimpleNamespace(books=books or [])
+
+
+def patch_xlwings(monkeypatch, apps=None) -> MagicMock:
+    """Replace this module's xlwings dependency and return its Book mock."""
+    book_mock = MagicMock()
+    fake_xw = SimpleNamespace(apps=[] if apps is None else apps, Book=book_mock)
+    monkeypatch.setattr(scenario_workbook, "xw", fake_xw)
+    return book_mock
 # endregion
 
 
@@ -79,10 +83,7 @@ class TestOpenScenarioWorkbook:
         already_open = make_book(fullname=str(workbook_file))
         app = make_app([already_open])
 
-        monkeypatch.setattr(f"{MODULE_PATH}xw.apps", [app])
-
-        xw_book_mock = MagicMock()
-        monkeypatch.setattr(f"{MODULE_PATH}xw.Book", xw_book_mock)
+        xw_book_mock = patch_xlwings(monkeypatch, [app])
 
         result = open_scenario_workbook("xlBaseTester.xlsx")
 
@@ -94,20 +95,14 @@ class TestOpenScenarioWorkbook:
         other_book = make_book(fullname=str(workbook_file.parent / "other.xlsx"))
         app = make_app([other_book])
 
-        monkeypatch.setattr(f"{MODULE_PATH}xw.apps", [app])
-
-        xw_book_mock = MagicMock()
-        monkeypatch.setattr(f"{MODULE_PATH}xw.Book", xw_book_mock)
+        xw_book_mock = patch_xlwings(monkeypatch, [app])
 
         open_scenario_workbook("xlBaseTester.xlsx")
 
         xw_book_mock.assert_called_once()
 
     def test_opens_new_book_when_no_apps_running(self, monkeypatch, workbook_file):
-        monkeypatch.setattr(f"{MODULE_PATH}xw.apps", [])
-
-        xw_book_mock = MagicMock()
-        monkeypatch.setattr(f"{MODULE_PATH}xw.Book", xw_book_mock)
+        xw_book_mock = patch_xlwings(monkeypatch)
 
         open_scenario_workbook("xlBaseTester.xlsx")
 
@@ -119,17 +114,14 @@ class TestOpenScenarioWorkbook:
         type(broken_book).fullname = property(lambda _: (_ for _ in ()).throw(RuntimeError("boom")))
 
         app = make_app([broken_book])
-        monkeypatch.setattr(f"{MODULE_PATH}xw.apps", [app])
-
-        xw_book_mock = MagicMock()
-        monkeypatch.setattr(f"{MODULE_PATH}xw.Book", xw_book_mock)
+        xw_book_mock = patch_xlwings(monkeypatch, [app])
 
         open_scenario_workbook("xlBaseTester.xlsx")
 
         xw_book_mock.assert_called_once()
 
     def test_raises_when_file_does_not_exist(self, monkeypatch):
-        monkeypatch.setattr(f"{MODULE_PATH}xw.apps", [])
+        patch_xlwings(monkeypatch)
 
         with pytest.raises(FileNotFoundError):
             open_scenario_workbook("does_not_exist.xlsx")

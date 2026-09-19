@@ -32,7 +32,7 @@ ACCOUNT_ID = UUID("12345678-1234-5678-1234-567812345678")
 
 
 @pytest.fixture
-def database(tmp_path: Path) -> Path:
+def db(tmp_path: Path) -> Path:
     path = tmp_path / "journal.sqlite3"
     initialize_database(path)
     account = Account(
@@ -66,17 +66,17 @@ def create_campaign(database: Path) -> tuple[TradeCampaign, TradeLeg]:
     return operation.execute(ACCOUNT_ID, trade_input())
 
 
-def test_allocate_reference_id_is_per_symbol_and_normalized(database: Path) -> None:
-    repo = SQLiteTradeCampaignRepository(database)
+def test_allocate_reference_id_is_per_symbol_and_normalized(db: Path) -> None:
+    repo = SQLiteTradeCampaignRepository(db)
 
     assert repo.allocate_reference_id(" xyz ") == "XYZ1"
     assert repo.allocate_reference_id("XYZ") == "XYZ2"
     assert repo.allocate_reference_id("abc") == "ABC1"
 
 
-def test_allocate_reference_id_is_atomic_across_connections(database: Path) -> None:
+def test_allocate_reference_id_is_atomic_across_connections(db: Path) -> None:
     def allocate(_: int) -> str:
-        return SQLiteTradeCampaignRepository(database).allocate_reference_id("XYZ")
+        return SQLiteTradeCampaignRepository(db).allocate_reference_id("XYZ")
 
     with ThreadPoolExecutor(max_workers=8) as executor:
         references = list(executor.map(allocate, range(24)))
@@ -85,10 +85,10 @@ def test_allocate_reference_id_is_atomic_across_connections(database: Path) -> N
     assert {int(reference.removeprefix("XYZ")) for reference in references} == set(range(1, 25))
 
 
-def test_add_persists_the_initial_creation_aggregate(database: Path) -> None:
-    campaign, leg = create_campaign(database)
+def test_add_persists_the_initial_creation_aggregate(db: Path) -> None:
+    campaign, leg = create_campaign(db)
 
-    with closing(connect_database(database)) as connection:
+    with closing(connect_database(db)) as connection:
         campaign_row = connection.execute("SELECT * FROM trade_campaigns").fetchone()
         leg_row = connection.execute("SELECT * FROM trade_legs").fetchone()
         order_row = connection.execute("SELECT * FROM orders").fetchone()
@@ -135,16 +135,16 @@ def test_add_persists_the_initial_creation_aggregate(database: Path) -> None:
     }
 
 
-def test_get_round_trips_the_supported_campaign(database: Path) -> None:
-    campaign, leg = create_campaign(database)
+def test_get_round_trips_the_supported_campaign(db: Path) -> None:
+    campaign, leg = create_campaign(db)
     persisted_note = "Imported DEV fill"
-    with closing(connect_database(database)) as connection, transaction(connection):
+    with closing(connect_database(db)) as connection, transaction(connection):
         connection.execute(
             "UPDATE transaction_events SET notes = ? WHERE id = ?",
             (persisted_note, str(campaign.events[0].id)),
         )
 
-    loaded = SQLiteTradeCampaignRepository(database).get(campaign.id)
+    loaded = SQLiteTradeCampaignRepository(db).get(campaign.id)
 
     assert loaded is not None
     assert loaded.id == campaign.id
@@ -194,13 +194,13 @@ def test_get_round_trips_the_supported_campaign(database: Path) -> None:
     assert loaded_event.order is loaded.orders[0][1]
 
 
-def test_get_returns_none_for_an_unknown_campaign(database: Path) -> None:
-    assert SQLiteTradeCampaignRepository(database).get(uuid4()) is None
+def test_get_returns_none_for_an_unknown_campaign(db: Path) -> None:
+    assert SQLiteTradeCampaignRepository(db).get(uuid4()) is None
 
 
-def test_get_by_reference_id_matches_uuid_lookup(database: Path) -> None:
-    campaign, _ = create_campaign(database)
-    repo = SQLiteTradeCampaignRepository(database)
+def test_get_by_reference_id_matches_uuid_lookup(db: Path) -> None:
+    campaign, _ = create_campaign(db)
+    repo = SQLiteTradeCampaignRepository(db)
 
     by_uuid = repo.get(campaign.id)
     by_ref_id = repo.get_by_reference_id(campaign.reference_id)
@@ -213,27 +213,27 @@ def test_get_by_reference_id_matches_uuid_lookup(database: Path) -> None:
     assert by_ref_id.events[0].id == by_uuid.events[0].id
 
 
-def test_get_by_reference_id_returns_none_for_an_unknown_reference(database: Path) -> None:
-    assert SQLiteTradeCampaignRepository(database).get_by_reference_id("MISSING1") is None
+def test_get_by_reference_id_returns_none_for_an_unknown_reference(db: Path) -> None:
+    assert SQLiteTradeCampaignRepository(db).get_by_reference_id("MISSING1") is None
 
 
-def test_get_rejects_an_incomplete_child_shape(database: Path) -> None:
-    campaign, _ = create_campaign(database)
-    with closing(connect_database(database)) as connection, transaction(connection):
+def test_get_rejects_an_incomplete_child_shape(db: Path) -> None:
+    campaign, _ = create_campaign(db)
+    with closing(connect_database(db)) as connection, transaction(connection):
         connection.execute(
             "DELETE FROM transaction_events WHERE campaign_id = ?",
             (str(campaign.id),),
         )
 
     with pytest.raises(ValueError, match="exactly one event; found 0"):
-        SQLiteTradeCampaignRepository(database).get(campaign.id)
+        SQLiteTradeCampaignRepository(db).get(campaign.id)
 
     with pytest.raises(ValueError, match="exactly one event; found 0"):
-        SQLiteTradeCampaignRepository(database).get_by_reference_id(campaign.reference_id)
+        SQLiteTradeCampaignRepository(db).get_by_reference_id(campaign.reference_id)
 
 
-def test_add_rolls_back_every_aggregate_row_when_event_insert_fails(database: Path) -> None:
-    with closing(connect_database(database)) as connection:
+def test_add_rolls_back_every_aggregate_row_when_event_insert_fails(db: Path) -> None:
+    with closing(connect_database(db)) as connection:
         connection.execute(
             """
             CREATE TRIGGER reject_transaction_event
@@ -246,9 +246,9 @@ def test_add_rolls_back_every_aggregate_row_when_event_insert_fails(database: Pa
         )
 
     with pytest.raises(sqlite3.IntegrityError, match="event insert rejected"):
-        create_campaign(database)
+        create_campaign(db)
 
-    with closing(connect_database(database)) as connection:
+    with closing(connect_database(db)) as connection:
         counts = {
             table: connection.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
             for table in ("trade_campaigns", "trade_legs", "orders", "transaction_events")
