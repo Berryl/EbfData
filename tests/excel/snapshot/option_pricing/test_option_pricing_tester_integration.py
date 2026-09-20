@@ -17,8 +17,8 @@ class TestOptionPricingIntegration:
     def pricing_scenario(self):
         table = SnapshotScenario_Pricing()
         yield table
-        table.close()
-        # return SnapshotScenario_Pricing()
+        # table.close()
+        return SnapshotScenario_Pricing()
 
     class TestEquityPricing:
         @pytest.fixture

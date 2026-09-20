@@ -1,6 +1,7 @@
 """
 Open/close infrastructure for TEST WORKBOOKS ONLY.
 """
+from doctest import debug
 from pathlib import Path
 
 import xlwings as xw
@@ -25,9 +26,16 @@ def open_scenario_workbook(path: str | Path) -> xw.Book:
     Open (or attach to, if already open) a disposable test workbook.
     """
     resolved_path = _resolved(path)
+    # print(resolved_path)
 
-    for app in xw.apps:
-        for book in app.books:
+    for app in list(xw.apps):
+        try:
+            books = list(app.books)
+        except (OSError, AttributeError, RuntimeError):
+            # HWND exists but Excel COM is not usable
+            continue
+
+        for book in books:
             try:
                 book_path = Path(book.fullname).resolve()
             except (FileNotFoundError, NotADirectoryError, ValueError, OSError, RuntimeError):

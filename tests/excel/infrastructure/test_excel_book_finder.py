@@ -1,9 +1,10 @@
 from types import SimpleNamespace
 
 import pytest
+import xlwings as xw
 
-from ebf_data.excel.cagr.cagr_table import MOCK_TODAY, CAGR_WB, CAGR_WKS
-from ebf_data.excel.infrastructure.excel_book_finder import find_open_book, get_named_value
+from ebf_data.excel.infrastructure.excel_book_finder import find_open_book, get_named_value, get_sheet_named_value
+from excel.pricing.pricing_scenarios import ExcelBookFinderTester
 
 
 def make_book(name, fullname=None):
@@ -15,6 +16,43 @@ def make_app(pid, books):
     for book in books:
         book.app = app
     return app
+
+KEEP_OPEN = False
+
+class TestXlBookFinder:
+    @pytest.fixture(scope="module")
+    def known_wkb(self) -> xw.Book:
+        book = ExcelBookFinderTester().book
+        yield book
+        if not KEEP_OPEN:
+            book.close()
+        # return book
+
+    class TestFindOpenBook:
+        def test_can_find_known_open_wkb(self, known_wkb):
+            assert known_wkb.name.endswith("xlsx")
+
+    class TestDefinedNames:
+        class TestGetNamedValue:
+            def test_can_get_named_value(self, known_wkb):
+                assert get_named_value(known_wkb, "WBK_SCOPE") == "some global value"
+
+            def test_can_get_refers_to_value(self, known_wkb):
+                assert get_named_value(known_wkb, "MEANING_OF_LIFE", refers_to=True) == '42'
+
+            def test_undefined_name_raises(self, known_wkb):
+                with pytest.raises(KeyError):
+                    get_named_value(known_wkb, "non existing name")
+
+        class TestGetSheetNamedValue:
+
+            def test_can_get_sheet_scoped_name(self, known_wkb):
+                sheet = known_wkb.sheets[0]
+                assert get_sheet_named_value(sheet, "LOCAL_SCOPE") == "some local value"
+
+            def test_can_get_sheet_scoped_refers_to(self, known_wkb):
+                sheet = known_wkb.sheets[0]
+                assert get_sheet_named_value(sheet, "MIN", True) == "18"
 
 
 @pytest.mark.integration
@@ -96,10 +134,3 @@ class TestWbFinder:
             assert "pid=222" in message
             assert r"C:\live\snapshot.xlsm" in message
             assert r"C:\stale\snapshot.xlsm" in message
-
-    class TestGetNamedValue:
-        def test_can_get_named_value(self):
-            wb = find_open_book(CAGR_WB)
-            sheet = wb.sheets[CAGR_WKS]
-            value = get_named_value(sheet, MOCK_TODAY)
-            assert value is not None
