@@ -9,7 +9,7 @@ name = "ebf-data"
 version = "0.1.0"
 description = "Data layer for EBF"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.14"
 authors = [
     { name = "EBF" },
 ]
