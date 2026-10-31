@@ -10,15 +10,17 @@ SHORT_PUT_SYMBOL_COUNT = 9
 LONG_CALL_SYMBOL_COUNT = 4
 SHORT_CALL_SYMBOL_COUNT = 5
 
+KEEP_OPEN = False
+
 @pytest.mark.integration
 class TestOptionPricingIntegration:
 
     @pytest.fixture(scope="module")
     def pricing_scenario(self):
-        table = SnapshotScenario_Pricing()
-        yield table
-        # table.close()
-        return SnapshotScenario_Pricing()
+        book = SnapshotScenario_Pricing()
+        yield book
+        if not KEEP_OPEN:
+            book.close()
 
     class TestEquityPricing:
         @pytest.fixture

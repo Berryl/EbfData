@@ -17,7 +17,7 @@ def make_app(pid, books):
         book.app = app
     return app
 
-KEEP_OPEN = True
+KEEP_OPEN = False
 
 class TestXlBookFinder:
     @pytest.fixture(scope="module")
