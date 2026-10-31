@@ -1,6 +1,6 @@
 import pytest
 
-from conftest import make_book_fixture
+from tests.excel.infrastructure.fixtures.book_fixtures import BookFixtures
 from ebf_data.excel.snapshot.option_price_updater import OptionPriceUpdater, OptionType, get_outcomes
 from ebf_data.excel.snapshot.price_updater import PriceUpdater
 from excel.pricing.pricing_scenarios import SnapshotScenario_Pricing
@@ -14,7 +14,7 @@ SHORT_CALL_SYMBOL_COUNT = 5
 @pytest.mark.integration
 class TestOptionPricingIntegration:
 
-    pricing_scenario = make_book_fixture(lambda: SnapshotScenario_Pricing())
+    pricing_scenario = BookFixtures.make_book_fixture(SnapshotScenario_Pricing)
 
     class TestEquityPricing:
         @pytest.fixture

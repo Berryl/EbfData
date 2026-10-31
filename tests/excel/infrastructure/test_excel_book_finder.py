@@ -3,7 +3,7 @@ from types import SimpleNamespace
 import pytest
 import xlwings as xw
 
-from conftest import make_book_fixture
+from tests.excel.infrastructure.fixtures.book_fixtures import BookFixtures
 from ebf_data.excel.infrastructure.excel_book_finder import find_open_book, get_named_value, get_sheet_named_value
 from excel.pricing.pricing_scenarios import ExcelBookFinderTester
 
@@ -19,7 +19,7 @@ def make_app(pid, books):
     return app
 
 class TestXlBookFinder:
-    known_wkb = make_book_fixture(lambda: ExcelBookFinderTester().book)
+    known_wkb = BookFixtures.make_book_fixture(lambda: ExcelBookFinderTester().book)
 
     class TestFindOpenBook:
 
