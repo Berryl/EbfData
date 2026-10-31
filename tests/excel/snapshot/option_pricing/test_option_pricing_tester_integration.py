@@ -1,5 +1,6 @@
 import pytest
 
+from conftest import make_book_fixture
 from ebf_data.excel.snapshot.option_price_updater import OptionPriceUpdater, OptionType, get_outcomes
 from ebf_data.excel.snapshot.price_updater import PriceUpdater
 from excel.pricing.pricing_scenarios import SnapshotScenario_Pricing
@@ -10,17 +11,10 @@ SHORT_PUT_SYMBOL_COUNT = 9
 LONG_CALL_SYMBOL_COUNT = 4
 SHORT_CALL_SYMBOL_COUNT = 5
 
-KEEP_OPEN = False
-
 @pytest.mark.integration
 class TestOptionPricingIntegration:
 
-    @pytest.fixture(scope="module")
-    def pricing_scenario(self):
-        book = SnapshotScenario_Pricing()
-        yield book
-        if not KEEP_OPEN:
-            book.close()
+    pricing_scenario = make_book_fixture(lambda: SnapshotScenario_Pricing())
 
     class TestEquityPricing:
         @pytest.fixture
